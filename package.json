@@ -1,0 +1,17 @@
+{
+  "name": "stl2sas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline mesh-to-small-angle-scattering workbench",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "python3 -m http.server 8080 --bind 127.0.0.1",
+    "pretest": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.cjs",
+    "benchmark": "node scripts/benchmark.cjs",
+    "deploy": "npm run build && npx --yes wrangler@4 deploy",
+    "deploy:check": "npm run build && npx --yes wrangler@4 deploy --dry-run",
+    "preview": "npm run build && python3 -m http.server 8080 --bind 127.0.0.1 --directory dist"
+  }
+}

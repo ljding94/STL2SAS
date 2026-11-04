@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f4f5f2">
+<meta name="description" content="Drop a 3D model into your browser and explore its small-angle scattering on three reciprocal-space planes. Private, offline, and interactive.">
+<title>STL2SAS · Scattering workbench</title>
+<style>/*__STYLES__*/</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#" aria-label="STL2SAS home"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2 29 9v14l-13 7L3 23V9Z M3 9l13 7 13-7M16 16v14M9.5 5.5l13 7v14M22.5 5.5l-13 7v14"/></svg><strong>STL<span>2</span>SAS</strong><span class="brand-divider"></span><span class="brand-caption">SCATTERING WORKBENCH</span></a>
+  <div class="header-actions"><span class="local-badge"><i></i> Runs on your device</span><button id="method-button" class="text-button">How it works <span>↗</span></button><span class="version">MVP 0.1</span></div>
+</header>
+<div class="app-shell">
+<aside class="sidebar">
+  <div class="section-label"><span>01</span> MODEL</div>
+  <input type="file" id="file-input" accept=".stl,.obj" hidden>
+  <button id="drop-zone" class="drop-zone"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 20V5m-6 6 6-6 6 6M6 20v7h20v-7"/></svg><strong>Drop your 3D model</strong><span>or click to browse</span><small>STL / OBJ · max 50 MB</small></button>
+  <label class="field-label" for="example">Or explore an example</label>
+  <select id="example"><optgroup label="Analytic solids"><option value="ellipsoid">Triaxial ellipsoid</option><option value="sphere">Sphere</option><option value="cube">Cube</option><option value="cylinder">Cylinder</option></optgroup><optgroup label="Real STL files · Trimesh"><option value="stl-torus">Torus · STL</option><option value="stl-angle-block">Angle block · STL</option></optgroup><option value="custom" disabled>Uploaded model</option></select>
+  <div class="example-downloads"><span>Download STL:</span><button id="download-torus">Torus ↓</button><button id="download-angle-block">Angle block ↓</button></div>
+  <div class="sidebar-rule"></div>
+  <div class="section-label"><span>02</span> SAMPLING</div>
+  <label class="field-label" for="point-count">Volume points <span id="point-label" class="field-value">20,000</span></label>
+  <select id="point-count"><option value="5000">5,000 · quick look</option><option value="20000" selected>20,000 · balanced</option><option value="50000">50,000 · detailed</option><option value="100000">100,000 · high precision</option><option value="250000">250,000 · low noise</option></select>
+  <div class="two-fields"><div><label class="field-label" for="size-value">Longest span</label><input id="size-value" type="number" min="0.000001" max="1000000000000" step="any" value="100"></div><div><label class="field-label" for="unit">Length unit</label><select id="unit"><option value="Å">Å</option><option value="nm" selected>nm</option><option value="µm">µm</option><option value="mm">mm</option><option value="unit">model unit</option></select></div></div>
+  <p id="size-hint" class="hint">Example span: 100 nm. STL files have no units.</p>
+  <button id="resample" class="secondary-button full"><span>⟳</span> Resample volume</button>
+  <div class="sidebar-rule"></div>
+  <div class="section-label"><span>03</span> DETECTOR</div>
+  <label class="field-label" for="resolution">Resolution</label><select id="resolution"><option value="128" selected>128 × 128 · interactive</option><option value="256">256 × 256 · fine</option><option value="512">512 × 512 · export quality</option></select>
+  <label class="field-label range-label" for="q-range">q range <span id="q-label" class="field-value">±0.32 nm⁻¹</span></label><input id="q-range" type="range" min="8" max="120" value="32" step="1"><div class="range-extents"><span>Low q</span><span>High q</span></div>
+  <label class="field-label range-label" for="dynamic-range">Log intensity range <span id="dynamic-label" class="field-value">5 decades</span></label><input id="dynamic-range" type="range" min="2" max="7" value="5" step="1">
+  <div class="sidebar-footer"><span class="privacy-icon">◈</span><div><strong>Your files stay here.</strong><p>No uploads. No server calculation.<br>Works offline as a single HTML file.</p></div></div>
+</aside>
+<main>
+  <div class="page-heading"><div><div class="eyebrow">REAL-SPACE MODEL → RECIPROCAL-SPACE PATTERN</div><h1>From shape to scattering<span>.</span></h1><p>Rotate a particle. Watch its scattering change.</p></div><button id="export" class="primary-button" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v10m-4-4 4 4 4-4M3 13v4h14v-4"/></svg>Export data</button></div>
+  <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <div class="workspace-grid">
+    <section class="card model-card">
+      <div class="card-heading"><div><span class="card-kicker">REAL SPACE</span><h2 id="model-name">Triaxial ellipsoid</h2></div><span id="model-type" class="tag">EXAMPLE</span></div>
+      <div class="model-stage" id="model-stage"><canvas id="model-canvas" tabindex="0" aria-label="3D particle model. Drag to rotate, use arrow keys to rotate, or scroll to zoom."></canvas><div class="stage-top"><span class="stage-pill"><i></i><span id="stage-point-count">20,000 points</span></span><button id="reset-view" title="Reset orientation and zoom" aria-label="Reset orientation and zoom">↺</button></div><div class="stage-bottom"><span>↔ Drag to rotate · scroll to zoom</span><span id="view-status">LIVE</span></div><div id="loading" class="loading"><span class="spinner"></span><span id="loading-label">Filling particle volume…</span></div></div>
+      <div class="orientation"><div class="orientation-title"><span>Orientation</span><button id="auto-rotate" class="text-button" aria-pressed="false">▷ Auto rotate</button></div><div class="angle-controls"><label><span class="axis-x">X</span><input id="angle-x" aria-label="X rotation in degrees" type="number" min="-180" max="180" step="1" value="20"><span>°</span></label><label><span class="axis-y">Y</span><input id="angle-y" aria-label="Y rotation in degrees" type="number" min="-180" max="180" step="1" value="-25"><span>°</span></label><label><span class="axis-z">Z</span><input id="angle-z" aria-label="Z rotation in degrees" type="number" min="-180" max="180" step="1" value="15"><span>°</span></label></div></div>
+    </section>
+    <section class="card scattering-card">
+      <div class="card-heading"><div><span class="card-kicker">RECIPROCAL SPACE</span><h2>2D scattering planes</h2></div><span id="compute-status" class="live-badge"><i></i> Initializing</span></div>
+      <div class="planes-grid">
+        <div class="plane"><div class="plane-heading"><strong><i class="plane-dot xy"></i>XY</strong><span>beam ∥ Z</span></div><div class="detector"><canvas id="plane-0" aria-label="XY normalized scattering intensity heatmap"></canvas><span class="q-vertical">qᵧ</span><span class="q-horizontal">qₓ</span><div class="detector-crosshair"></div></div><div class="plane-ticks"><span class="tick-min">−0.32</span><span>0</span><span class="tick-max">+0.32</span></div></div>
+        <div class="plane"><div class="plane-heading"><strong><i class="plane-dot xz"></i>XZ</strong><span>beam ∥ Y</span></div><div class="detector"><canvas id="plane-1" aria-label="XZ normalized scattering intensity heatmap"></canvas><span class="q-vertical">q𝓏</span><span class="q-horizontal">qₓ</span><div class="detector-crosshair"></div></div><div class="plane-ticks"><span class="tick-min">−0.32</span><span>0</span><span class="tick-max">+0.32</span></div></div>
+        <div class="plane"><div class="plane-heading"><strong><i class="plane-dot yz"></i>YZ</strong><span>beam ∥ X</span></div><div class="detector"><canvas id="plane-2" aria-label="YZ normalized scattering intensity heatmap"></canvas><span class="q-vertical">q𝓏</span><span class="q-horizontal">qᵧ</span><div class="detector-crosshair"></div></div><div class="plane-ticks"><span class="tick-min">−0.32</span><span>0</span><span class="tick-max">+0.32</span></div></div>
+      </div>
+      <div class="color-key"><span>I(q) / I(0)</span><span id="color-min">10⁻⁵</span><div class="color-gradient"></div><span>1</span><span class="key-log">LOG SCALE</span></div>
+      <div class="detector-note"><span>↗</span><p>Three fixed laboratory planes, one rotating particle.<br><strong id="detector-detail">128² pixels per plane · q in nm⁻¹</strong></p></div>
+      <div id="hover-readout" class="hover-readout">Hover over a detector to inspect q and intensity.</div>
+    </section>
+  </div>
+  <section class="card profile-card"><div class="profile-intro"><span class="card-kicker">PLANE AVERAGES</span><h2>A closer look at I(q)</h2><p>Azimuthal averages of each 2D plane.<br>These are not a 3D isotropic average.</p><div class="plot-legend"><span><i class="xy"></i>XY</span><span><i class="xz"></i>XZ</span><span><i class="yz"></i>YZ</span></div><label class="analytic-toggle"><input id="analytic" type="checkbox" checked> Analytic example reference</label></div><div class="profile-plot"><canvas id="profile-canvas" aria-label="Log intensity versus q for all three planes and analytic reference for supported examples"></canvas></div></section>
+  <div class="metrics"><div><span>SCATTERING POINTS</span><strong id="metric-points">—</strong><small>uniform volume sampling</small></div><div><span>LAST CALCULATION</span><strong id="metric-time">—</strong><small id="metric-grid">three 128 × 128 planes</small></div><div><span>RADIUS OF GYRATION</span><strong id="metric-rg">—</strong><small>estimated from sampled points</small></div><div><span>SAMPLING FLOOR</span><strong id="metric-floor">—</strong><small>finite-point noise ≈ 1 / N</small></div></div>
+  <footer><span>STL2SAS <b> / </b> Single-particle form factor · uniform contrast</span><button id="method-footer" class="text-button">Method & limitations ↗</button></footer>
+</main>
+</div>
+<div id="drop-overlay" class="drop-overlay" hidden><div><span>↓</span><h2>Drop a model to explore</h2><p>Binary or ASCII STL · OBJ</p></div></div>
+<dialog id="method-dialog"><button id="close-method" class="dialog-close" aria-label="Close method dialog">×</button><span class="card-kicker">THE METHOD</span><h2>A fast path from volume to scattering.</h2><p>Uniform random points fill the enclosed model. For a single particle of constant scattering-length density, the normalized intensity is:</p><div class="equation">P(q) = | Σⱼ exp(i q · R rⱼ) / N |²</div><p>We rotate the same points, project them onto XY, XZ and YZ, then apply a 2D FFT to each density projection. Cloud-in-cell deposition, a 2× oversampled grid, and a window correction reduce gridding error. The central pixel is exactly 1.</p><p>At fixed detector size, rotation and deposition scale as <strong>O(N)</strong>; the three FFTs add <strong>O(M² log M)</strong>, where M is the detector width. Initial mesh checks and volume sampling have a separate, geometry-dependent cost.</p><h3>What this MVP assumes</h3><ul><li>One particle, uniform contrast, dilute limit, flat small-angle detector planes. No multiple scattering, Ewald-sphere curvature, polydispersity or instrument smearing.</li><li>STL and OBJ solid meshes only, up to 200,000 triangles / 50 MB. Closed edges are checked at 10⁻⁶ of the longest span. Self-intersections are not detected. Nested closed shells use odd–even filling and represent cavities.</li><li>Sampling is uniform in volume, not on the surface. The ≈1/N intensity floor is Monte Carlo noise; increase the point count to lower it. The FFT is approximate, especially near deep minima and high q.</li><li>The three plane averages are directional cross-sections, not the isotropic Debye form factor. q = 2π / length; q is shown in the inverse of your chosen unit. The longest span sets the physical scale and is the largest original bounding-box side, not D<sub>max</sub>.</li><li>Exports contain raw normalized intensities, including values below the display color floor. There is no absolute-intensity calibration.</li></ul><p class="references">References: <a href="https://journals.iucr.org/j/issues/2023/04/00/jl5064/index.html" target="_blank" rel="noopener">Larsen et al., Shape2SAS (2023)</a> · <a href="https://github.com/cw-do/morphsld_sas" target="_blank" rel="noopener">morphsld_sas</a>. This is an independent implementation.</p></dialog>
+<script id="example-data" type="application/json">/*__EXAMPLES__*/</script>
+<script id="worker-source" type="text/plain">/*__WORKER__*/</script>
+<script>/*__CORE__*/</script>
+<script>/*__APP__*/</script>
+</body></html>

@@ -1,0 +1,6 @@
+input: stl file, or any 3d model file
+Output: small angel scattering
+
+Reference: https://journals.iucr.org/j/issues/2023/04/00/jl5064/index.html
+
+https://github.com/cw-do/morphsld_sas
