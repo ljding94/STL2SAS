@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>STL2SAS isotropic invariance check</title>
+<style>body{font:14px system-ui;margin:20px;background:#f4f5f1;color:#203b2e}button{padding:12px}iframe{width:100%;height:900px;border:1px solid #bbb;margin-top:15px}output{margin-left:15px}</style>
+<h1>Isotropic browser integration check</h1>
+<p>Compares exported curves before and after rotation, checks cache reuse, and checks resampling invalidation.</p>
+<button id="run" disabled>Check isotropic invariance</button><output id="result">Loading app…</output>
+<iframe id="app" src="../index.html" title="STL2SAS app under test"></iframe>
+<script>
+const frame=document.getElementById('app'),button=document.getElementById('run'),output=document.getElementById('result');
+frame.addEventListener('load',()=>{button.disabled=false;output.textContent='Ready';});
+async function waitUntil(condition){const deadline=performance.now()+30000;while(performance.now()<deadline){if(condition())return;await new Promise(r=>setTimeout(r,50));}throw Error('Timed out waiting for app');}
+button.addEventListener('click',async()=>{
+  button.disabled=true;
+  try{
+    const doc=frame.contentDocument,win=frame.contentWindow,status=doc.getElementById('isotropic-status');
+    const ready=()=>status.dataset.ready==='true'&&!doc.getElementById('export-profiles').disabled;
+    await waitUntil(ready);
+    async function exported(){
+      return new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>reject(Error('No profile export')),5000);
+        const capture=event=>{const link=event.target.closest('a[download="stl2sas-profiles.csv"]');if(!link)return;event.preventDefault();doc.removeEventListener('click',capture,true);clearTimeout(timer);win.fetch(link.href).then(r=>r.text()).then(resolve,reject);};
+        doc.addEventListener('click',capture,true);doc.getElementById('export-profiles').click();
+      });
+    }
+    const before=await exported(),id=status.dataset.calculationId;
+    const rows=(text,kind)=>text.split('\n').filter(row=>row.startsWith(kind+','));
+    const input=doc.getElementById('angle-x');input.value=75;input.dispatchEvent(new win.Event('input',{bubbles:true}));input.dispatchEvent(new win.Event('change',{bubbles:true}));
+    await waitUntil(ready);
+    const after=await exported();
+    if(rows(before,'isotropic').length<20)throw Error('Isotropic export missing');
+    if(rows(before,'isotropic').join('\n')!==rows(after,'isotropic').join('\n'))throw Error('Isotropic values changed with rotation');
+    if(rows(before,'XY_azimuthal').join('\n')===rows(after,'XY_azimuthal').join('\n'))throw Error('Plane average did not follow rotation');
+    if(status.dataset.calculationId!==id)throw Error('Rotation restarted isotropic worker');
+    const range=doc.getElementById('q-range');range.value=64;range.dispatchEvent(new win.Event('input',{bubbles:true}));
+    const resolution=doc.getElementById('resolution');resolution.value='256';resolution.dispatchEvent(new win.Event('change',{bubbles:true}));
+    const span=doc.getElementById('size-value');span.value=200;span.dispatchEvent(new win.Event('change',{bubbles:true}));
+    await waitUntil(ready);
+    if(status.dataset.calculationId!==id)throw Error('q range, detector size or span restarted isotropic worker');
+    const beforeResample=await exported();
+    doc.getElementById('resample').click();
+    await waitUntil(()=>ready()&&status.dataset.calculationId!==id);
+    const regenerated=await exported();
+    if(rows(beforeResample,'isotropic').join('\n')===rows(regenerated,'isotropic').join('\n'))throw Error('Resampling kept a stale isotropic curve');
+    const quality=doc.getElementById('isotropic-quality'),resampledId=status.dataset.calculationId;quality.value='fast';quality.dispatchEvent(new win.Event('change',{bubbles:true}));
+    await waitUntil(()=>ready()&&status.dataset.calculationId!==resampledId);
+    if(!status.textContent.includes('512'))throw Error('Accuracy change was not applied');
+    output.textContent='PASS — isotropic CSV unchanged by rotation; plane CSV changes; cache reused for q/grid/scale; resampling and accuracy restart it';
+    output.dataset.pass='true';button.disabled=false;
+  }catch(error){output.textContent='FAIL — '+error.message;button.disabled=false;}
+});
+</script></html>

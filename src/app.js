@@ -5,8 +5,8 @@
   const names = {ellipsoid: 'Triaxial ellipsoid', sphere: 'Sphere', cube: 'Cube', cylinder: 'Cylinder'};
   const planeNames = ['XY', 'XZ', 'YZ'], plotColors = ['#197d62', '#7186cf', '#d59a4c'];
   const sourceURL = URL.createObjectURL(new Blob([$('worker-source').textContent], {type: 'text/javascript'}));
-  const state = {shape: 'ellipsoid', file: null, points: null, display: null, angles: [20, -25, 15], zoom: 1, result: null, pending: null, busy: false, requestId: 0, seed: 42, sampling: false, auto: false, sampleVersion: 0};
-  let sampleWorker = null, calcWorker = null, modelData = null, modelDirty = true;
+  const state = {shape: 'ellipsoid', file: null, points: null, display: null, angles: [20, -25, 15], zoom: 1, result: null, isotropic: null, pending: null, busy: false, requestId: 0, seed: 42, sampling: false, auto: false, sampleVersion: 0};
+  let sampleWorker = null, calcWorker = null, isotropicWorker = null, isotropicId = 0, modelData = null, modelDirty = true;
   const fmt = n => new Intl.NumberFormat('en-US').format(n);
   const number = (n, digits = 3) => Math.abs(n) >= 10000 || (Math.abs(n) > 0 && Math.abs(n) < .001) ? n.toExponential(2) : Number(n.toPrecision(digits)).toString();
   const length = () => Number($('size-value').value);
@@ -18,6 +18,41 @@
     state.sampling = active; $('loading').hidden = !active; $('loading-label').textContent = message;
     $('export').disabled = active || !state.result; $('resample').disabled = active;
     $('compute-status').lastChild.textContent = active ? ' Sampling' : ' Live';
+    updateProfileExport();
+  }
+  function updateProfileExport() { $('export-profiles').disabled = state.sampling || state.busy || !!state.pending || !state.result || !state.isotropic; }
+  function stopIsotropic() {
+    isotropicId++;
+    if (isotropicWorker) isotropicWorker.terminate();
+    isotropicWorker = null; state.isotropic = null; updateProfileExport();
+  }
+  function calculateIsotropic() {
+    if (!state.points || state.sampling) return;
+    stopIsotropic();
+    const id = isotropicId, version = state.sampleVersion;
+    $('isotropic-status').textContent = 'Calculating isotropic average…';
+    $('isotropic-status').dataset.calculationId = String(id);
+    $('isotropic-status').dataset.ready = 'false';
+    drawProfile();
+    isotropicWorker = new Worker(sourceURL);
+    isotropicWorker.onmessage = ({data}) => {
+      if (id !== isotropicId || version !== state.sampleVersion) return;
+      if (data.type === 'isotropic-progress') { $('isotropic-status').textContent = `Isotropic average · ${Math.round(data.fraction * 100)}%`; return; }
+      if (data.type === 'error') {
+        $('isotropic-status').textContent = `Isotropic average unavailable: ${data.message}`;
+        isotropicWorker.terminate(); isotropicWorker = null; return;
+      }
+      if (data.type !== 'isotropic-result') return;
+      state.isotropic = data;
+      $('isotropic-status').textContent = `Ready · ${fmt(data.directions)} directions · fixed during rotation`;
+      $('isotropic-status').dataset.ready = 'true';
+      isotropicWorker.terminate(); isotropicWorker = null;
+      drawProfile(); updateProfileExport();
+    };
+    isotropicWorker.onerror = () => { if (id === isotropicId) { $('isotropic-status').textContent = 'Isotropic worker stopped. Change accuracy or resample to retry.'; isotropicWorker.terminate(); isotropicWorker = null; } };
+    // Cover the entire qD slider once. Rotation, zoom, q range, detector size and
+    // physical units all reuse this body-frame curve; none requests another job.
+    isotropicWorker.postMessage({type: 'isotropic', id, points: state.points, qMaxD: 120, quality: $('isotropic-quality').value});
   }
   function createCalculationWorker() {
     if (calcWorker) calcWorker.terminate();
@@ -34,10 +69,11 @@
         drawDetectors(); drawProfile();
       }
       if (state.pending) { const next = state.pending; state.pending = null; sendCalculation(next); }
+      updateProfileExport();
     };
     calcWorker.onerror = () => { state.busy = false; notice('The calculation worker stopped. Reload this page to restart.', true); $('compute-status').lastChild.textContent = ' Error'; };
   }
-  function sendCalculation(job) { state.busy = true; calcWorker.postMessage(job); }
+  function sendCalculation(job) { state.busy = true; updateProfileExport(); calcWorker.postMessage(job); }
   function calculate() {
     if (!state.points || state.sampling) return;
     const job = {type: 'calculate', id: ++state.requestId, angles: [...state.angles], matrix: SAS.rotationMatrix(state.angles), size: Number($('resolution').value), qMaxD: Number($('q-range').value)};
@@ -47,6 +83,7 @@
   async function loadModel(newModel = false) {
     const version = ++state.sampleVersion;
     if (sampleWorker) sampleWorker.terminate();
+    stopIsotropic(); $('isotropic-status').textContent = 'Waiting for model…'; $('isotropic-status').dataset.ready = 'false';
     state.auto = false; updateAutoButton();
     notice(); setSampling(true);
     if (calcWorker) { calcWorker.terminate(); calcWorker = null; }
@@ -82,7 +119,7 @@
         if (state.file) $('size-hint').textContent = `Native bounds: ${data.dimensions.map(n => number(n)).join(' × ')}. Set a unit and physical span.`;
         else $('size-hint').textContent = 'Example span: 100 nm. Change the span to set your physical scale.';
         createCalculationWorker(); calcWorker.postMessage({type: 'points', points: data.points});
-        prepareRenderingData(); setSampling(false); updateLabels(); calculate();
+        prepareRenderingData(); setSampling(false); updateLabels(); calculate(); calculateIsotropic();
         if (data.degenerate) notice(`${fmt(data.degenerate)} zero-area triangles were removed before sampling.`);
         sampleWorker.terminate();
       };
@@ -221,6 +258,11 @@
         for (let i = 0; i <= 160; i++) { const q = qMaxD * i / 160, v = analyticPlane(q, p, matrix); if (i) ctx.lineTo(x(q), y(v)); else ctx.moveTo(x(q), y(v)); } ctx.stroke(); ctx.globalAlpha = 1;
       }
     }
+    if (state.isotropic) {
+      ctx.strokeStyle = '#253c37'; ctx.lineWidth = 2.4 * dpr; ctx.setLineDash([]); ctx.beginPath();
+      state.isotropic.qD.forEach((q, i) => { const yy = y(state.isotropic.intensity[i]); if (i) ctx.lineTo(x(q), yy); else ctx.moveTo(x(q), yy); });
+      ctx.stroke();
+    }
     const floor = 1 / state.result.count;
     ctx.setLineDash([2 * dpr, 4 * dpr]); ctx.strokeStyle = '#b7bdac'; ctx.lineWidth = dpr; ctx.beginPath(); ctx.moveTo(pad.l, y(floor)); ctx.lineTo(w - pad.r, y(floor)); ctx.stroke(); ctx.setLineDash([]);
     if (y(floor) > pad.t && y(floor) < pad.t + ph) { ctx.fillStyle = '#a0aa93'; ctx.textAlign = 'right'; ctx.fillText('1/N', w - pad.r - 4 * dpr, y(floor) - 5 * dpr); }
@@ -304,6 +346,7 @@
   });
   $('unit').addEventListener('change', () => { updateLabels(); drawProfile(); });
   $('analytic').addEventListener('change', drawProfile);
+  $('isotropic-quality').addEventListener('change', calculateIsotropic);
   ['method-button', 'method-footer'].forEach(id => $(id).addEventListener('click', () => $('method-dialog').showModal()));
   $('close-method').addEventListener('click', () => $('method-dialog').close());
   $('method-dialog').addEventListener('click', event => { if (event.target === $('method-dialog')) { const r = event.target.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) event.target.close(); } });
@@ -323,6 +366,23 @@
     const url = URL.createObjectURL(new Blob([text], {type})), a = document.createElement('a');
     a.href = url; a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
+  $('export-profiles').addEventListener('click', () => {
+    if (!state.result || !state.isotropic || state.sampling) return;
+    const iso = state.isotropic;
+    const rows = [
+      '# STL2SAS normalized profiles; isotropic averages INTENSITY over 3D directions',
+      `# model=${JSON.stringify(state.file ? state.file.name : names[state.shape])}; N=${iso.count}; seed=${state.seed}`,
+      `# longest_span=${length()}; length_unit=${unit()}; plane_rotation_xyz_degrees=${state.result.angles.join(' ')}`,
+      `# displayed_qD_max=${state.result.qMaxD}; cached_isotropic_qD_max=${iso.qMaxD}`,
+      `# isotropic_method=Gauss-Legendre_polar_x_uniform_azimuth_1D_FFT; quality=${iso.quality}; directions=${iso.directions}; polar_order=${iso.polarOrder}; azimuth_count=${iso.azimuthCount}; projection_fft=${iso.gridSize}`,
+      '# isotropic is cached in the original model frame; plane averages follow rotation',
+      '# numerical angular integration and gridding are approximate; finite-point self terms retained',
+      'profile,q,I_over_I0'
+    ];
+    for (let i = 0; i < iso.qD.length && iso.qD[i] <= state.result.qMaxD + 1e-10; i++) rows.push(`isotropic,${(iso.qD[i] / length()).toPrecision(10)},${iso.intensity[i].toExponential(10)}`);
+    radialProfiles(state.result).forEach((profile, p) => profile.forEach(([q, value]) => rows.push(`${planeNames[p]}_azimuthal,${(q / length()).toPrecision(10)},${value.toExponential(10)}`)));
+    download(rows.join('\n') + '\n', 'stl2sas-profiles.csv', 'text/csv;charset=utf-8');
+  });
   $('export').addEventListener('click', () => {
     if (!state.result) return;
     const {size, qMaxD, planes, count, angles} = state.result;
@@ -332,7 +392,7 @@
       `# N=${count}; seed=${state.seed}; longest_span=${length()}; length_unit=${unit()}; rotation_xyz_degrees=${angles.join(' ')}`,
       '# R=Rz*Ry*Rx; q uses radians/length; plane coordinates are fixed in laboratory space',
       '# raw intensities include the finite-point self term; expected noise floor ~1/N',
-      '# radial profiles and three planes are not an isotropic average; CSV columns use physical q',
+      '# these directional planes are not an isotropic average; use Export profiles for the isotropic curve',
       '# XY=(qx,qy), XZ=(qx,qz), YZ=(qy,qz)',
       'plane,q_a,q_b,I_over_I0'
     ];
@@ -340,6 +400,6 @@
     for (let p = 0; p < 3; p++) for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) rows.push(`${planeNames[p]},${((x - size / 2) * 2 * qMaxD / size / length()).toPrecision(9)},${((y - size / 2) * 2 * qMaxD / size / length()).toPrecision(9)},${planes[p][y * size + x].toExponential(8)}`);
     download(rows.join('\n') + '\n', 'stl2sas-planes.csv', 'text/csv;charset=utf-8');
   });
-  window.addEventListener('beforeunload', () => { removeFileDrop(); if (sampleWorker) sampleWorker.terminate(); if (calcWorker) calcWorker.terminate(); URL.revokeObjectURL(sourceURL); });
+  window.addEventListener('beforeunload', () => { removeFileDrop(); if (sampleWorker) sampleWorker.terminate(); if (calcWorker) calcWorker.terminate(); if (isotropicWorker) isotropicWorker.terminate(); URL.revokeObjectURL(sourceURL); });
   updateLabels(); loadModel();
 })();

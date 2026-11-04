@@ -33,3 +33,15 @@ For sparsely occupied meshes, conservative spatial proposal cells reduce rejecti
 Chrome loaded the car and displayed its three planes. The profile plot was also given a fixed CSS height to prevent a canvas intrinsic-size resize feedback loop. The fixed display camera now views from above; the physical particle rotation and scattering coordinates are unchanged.
 
 All six pre-existing mesh dropdown entries were also exercised individually in Chrome and displayed their corresponding file names, including STL and OBJ variants. The selection-specific download was confirmed complete for `concave-L.obj`. The updated Cloudflare dry run successfully read 13 static files. No live deployment was made.
+
+## Cached 3D isotropic average
+
+The bottom plot now includes the numerical 3D isotropic intensity average alongside the three changing plane averages. It integrates squared amplitudes over the sphere using all original N volume points, Gauss–Legendre polar weights, uniform azimuths, and 8192-point, eight-fold oversampled 1D projection FFTs. Positive-hemisphere symmetry reduces the actual evaluations to 512 / 2048 / 8192 directions for Fast / Balanced / Fine. The curve is nonnegative, retains finite-point self terms, and has P(0) = 1.
+
+The isotropic worker receives unrotated points and no display-rotation matrix. It computes and caches 513 qD values over 0–120 once per model/point set/accuracy. Rotation, zoom, displayed q range, detector resolution, physical span and units do not launch it again. New sampling/model/N/accuracy cancels the old job, discards stale results, and starts a new calculation. Detector calculation runs in a separate worker and does not wait for isotropic completion.
+
+`npm test`: 28 tests passed. Added independent exact finite-point Debye comparisons, solid-angle quadrature moment checks, high-q refinement checks, a point-cloud rotation/translation check, and the analytic sphere including the finite-point self contribution. Balanced agrees with the 48-point Debye fixture within the test tolerance of 3×10^-5 through qD = 32; Fine is within 5×10^-4 at the tested higher-q coordinates and improves on Fast. These are fixture tolerances, not general numerical error guarantees; high q and strong anisotropy can need refinement.
+
+`tests/browser-isotropic.html` passed in Chrome. It captured the app's actual profile CSV exports and confirmed that isotropic rows are byte-for-byte identical after rotation while XY plane-average rows change. It also verified cache reuse when q range, detector grid and physical span change; a new calculation and different curve after resampling; and a new Fast result with 512 directions after changing accuracy. The profile CSV includes all four curves and numerical-method metadata.
+
+Local warmed Node timings for Balanced, the full qD interval, and 513 output values were 657 ms at N = 20,000; 1433 ms at N = 100,000; and 2104 ms at N = 250,000. This is an occasional background cost, not part of each rotation's detector calculation. The updated panel is shown in `isotropic-profiles.jpg`.

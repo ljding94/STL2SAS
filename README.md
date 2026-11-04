@@ -15,8 +15,9 @@ For your existing repository, follow the hosting guide to connect it directly. T
 3. Choose the number of volume points. Imported models must be closed solids. The app checks open and non-manifold edges before uniformly filling the enclosed volume; it never substitutes surface points.
 4. Set the longest span and length unit. STL does **not** encode units. On import, the native largest bounding-box side is preserved and labeled “model unit” until you assign a physical unit. The longest span is not the maximum pair distance, Dmax.
 5. Drag the particle, use arrow keys, edit X/Y/Z angles, or enable auto rotation. The XY, XZ, and YZ laboratory planes update together. Scroll over the particle to zoom without changing its physical size or scattering.
-6. Adjust q range, detector resolution, and color range. Hover over a detector for its numerical q and intensity. The dashed reference lines on the profile plot are analytic sphere/ellipsoid results; the horizontal 1/N line is the approximate sampling floor.
-7. Export data to get `stl2sas-planes.csv`, containing raw normalized intensities, physical q coordinates, and simulation metadata for all three planes. At 512² this is a large CSV; use 128² for a quick export.
+6. Adjust q range, detector resolution, and color range. Hover over a detector for its numerical q and intensity. The bottom plot includes a dark **isotropic average** and three colored azimuthal plane averages. The isotropic curve stays fixed during rotation; the plane curves change. Dashed reference curves are analytic sphere/ellipsoid plane results; the horizontal 1/N line is the approximate sampling floor.
+7. The isotropic curve computes in a separate background worker. Choose Fast, Balanced, or Fine accuracy; compare settings for high q or elongated shapes. Rotation, zoom, q range, detector size, physical span, and units reuse the cached curve. A new model, resampling, point-count change, or accuracy change regenerates it.
+8. **Export data** saves `stl2sas-planes.csv` with the three directional detector maps. **Export profiles** saves `stl2sas-profiles.csv` with isotropic and plane-average curves, physical q coordinates, and method/rotation metadata. At 512² the detector CSV is large; use 128² for a quick export.
 
 The app is a single portable file: you can copy `index.html` to another computer. Its source is kept separately in `src/` for development. Current Chrome, Edge, Firefox, or Safari is recommended; the page uses Blob Web Workers, Canvas 2D, and native HTML dialogs.
 
@@ -57,7 +58,18 @@ Initial local benchmark, Apple arm64 / Node 25.9, three 128² detectors, 7-rotat
 
 This is a **single-particle, uniform-contrast form factor**, normalized to forward intensity 1. It does not model interparticle correlations, multiple scattering, spatially varying contrast, polydispersity, instrumental resolution, absolute intensity, or detector curvature. Planes are flat qz=0, qy=0, and qx=0 sections in the small-angle limit.
 
-The plotted plane averages are 2D azimuthal averages. **They are not the 3D orientational average** and must not be interpreted as isotropic solution scattering for a general anisotropic particle.
+The three colored plane curves are 2D azimuthal averages. **They are not the 3D orientational average.** The separate dark curve is the numerical isotropic average of the full point cloud:
+
+```text
+P_iso(q) = (1 / 4pi) integral_sphere |(1/N) sum_j exp(i q n · r_j)|² dOmega
+         = (1/N²) sum_jk sinc(q |r_j - r_k|)    [exact Debye reference]
+```
+
+The implementation averages **intensity**, not complex amplitude, using Gauss–Legendre quadrature in cos(theta) and uniform azimuths. It evaluates only the positive hemisphere because real uniform contrast gives P(q n) = P(-q n). Each direction projects all original N points onto a line, deposits them with cloud-in-cell weights, and applies an 8192-point 1D FFT. Eight-fold oversampling and the sinc⁴ intensity window correction reduce gridding error. The result is nonnegative and normalized to P_iso(0) = 1.
+
+Fast uses 16 polar × 64 azimuthal nodes (512 unique hemisphere directions); Balanced uses 32 × 128 (2048); Fine uses 64 × 256 (8192). This is approximate angular integration and gridding, not an exact all-pairs Debye calculation. High-q values, sharp minima and strong anisotropy can require more angular resolution; compare accuracy settings before interpreting those regions. Finite-point noise and the 1/N self term remain.
+
+The complete qD interval 0–120 is computed once for the sampled model and selected accuracy, with 513 q values (spacing 0.234375). The current q range clips this cached curve. Model rotations never enter its worker inputs, so displayed isotropic values remain exactly unchanged as the particle rotates. Changing physical scale/units relabels the q coordinates; resampling or changing N/model/accuracy starts a new calculation. The separate worker does not block detector rotation. Its cost is O(KN + KG log G), memory O(N + G), for K unique directions and G = 8192; it stays linear in N at fixed accuracy.
 
 Monte Carlo self terms produce an expected intensity floor of approximately 1/N. No self-term subtraction is applied. The corresponding continuum form factor becomes unreliable near/below that floor. More points lower sampling noise. At fixed q range, more detector pixels provide denser reciprocal-space sampling by increasing zero padding; the deposition spacing is set by the q range and the fixed 2× oversampling, so a larger detector does not by itself remove gridding error or Monte Carlo noise. Gridding error and finite-point noise are most visible at deep minima and high q.
 
@@ -77,13 +89,14 @@ npm run deploy:check # validate the Cloudflare package without publishing
 npm run deploy      # build and deploy to your signed-in Cloudflare account
 ```
 
-Tests compare FFT intensities with direct complex sums on all three planes, the sphere analytic form factor, normalization, shared-axis consistency, Friedel symmetry, rotation conventions, uniform-volume moments, actual mesh imports, concave polygons, and malformed/open meshes. `node scripts/make-examples.cjs` regenerates the example files.
+Tests compare FFT intensities with direct complex sums on all three planes, exact finite-point Debye isotropic sums, analytic sphere scattering, quadrature weights, refinement, rotation/translation invariance, normalization, shared-axis consistency, Friedel symmetry, uniform-volume moments, actual mesh imports, and malformed/open meshes. `tests/browser-isotropic.html` checks exported isotropic invariance during rotation, changing plane averages, cache reuse, and invalidation after resampling/accuracy changes. `node scripts/make-examples.cjs` regenerates the example files.
 
 ## References and relationship to the notes
 
 - [Larsen et al. (2023), *Shape2SAS: a web application to simulate small-angle scattering data and pair distance distributions from user-defined shapes*, J. Appl. Cryst. 56, 1287–1294](https://journals.iucr.org/j/issues/2023/04/00/jl5064/index.html). The supplied paper calculates isotropic scattering using point-pair distances. This MVP follows the proposed alternative of orientation-dependent 2D planes.
 - [cw-do/morphsld_sas](https://github.com/cw-do/morphsld_sas), inspected at commit `230a2dfad50b5ea99c7be150df3a8ab45053fcbd`. Its scattering engine transforms radial scattering-length-density profiles and includes analytic sphere validation. It is context rather than an arbitrary-mesh loader or 2D detector engine.
+- [SasView scattering theory](https://www.sasview.org/docs/user/qtgui/Perspectives/Fitting/theory.html) defines the isotropic 1D pattern as the orientational average of intensity; this is distinct from averaging directional detector planes.
 
 This project is an independent implementation; no source code was copied from either reference. Two example STL assets come from the MIT-licensed Trimesh repository. The detailed car is a modified CC0 derivative of Khronos' ToyCar by Guido Odendahl and Eric Chadwick. Upstream notices, pinned source links, checksums, and the car's conversion steps are in `examples/` and embedded with the assets in the portable HTML.
 
-Useful next additions: direct-sum spot checks in the UI, GPU deposition/FFT for larger grids, mesh repair and more formats, multiple SLD regions, and a converged orientational average from repeated rotated amplitudes.
+Useful next additions: direct-sum spot checks in the UI, adaptive convergence checks for isotropic angular integration, GPU deposition/FFT for larger grids, mesh repair and more formats, and multiple SLD regions.

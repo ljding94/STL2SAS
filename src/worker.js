@@ -19,6 +19,10 @@ self.onmessage = ({data}) => {
       self.postMessage({type: 'sampled', ...result, ms: performance.now() - start}, [result.points.buffer, result.display.buffer]);
     } else if (data.type === 'points') {
       points = data.points;
+    } else if (data.type === 'isotropic') {
+      const start = performance.now();
+      const result = SAS.isotropicScattering(data.points, data.qMaxD, data.quality, fraction => self.postMessage({type: 'isotropic-progress', id: data.id, fraction}));
+      self.postMessage({type: 'isotropic-result', id: data.id, ...result, ms: performance.now() - start}, [result.qD.buffer, result.intensity.buffer]);
     } else if (data.type === 'calculate') {
       const start = performance.now();
       if (!points) throw Error('Load a model first.');
