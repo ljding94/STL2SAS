@@ -14,17 +14,28 @@
   const inverseUnit = () => `${unit()}⁻¹`;
   const superscript = n => String(n).split('').map(x => ({'-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹'}[x])).join('');
   function notice(message = '', error = false) { $('notice').textContent = message; $('notice').hidden = !message; $('notice').classList.toggle('error', error); }
+  function setComputeStatus(label) {
+    const text = ` ${label}`, node = $('compute-status').lastChild;
+    if (node.textContent !== text) node.textContent = text;
+  }
   function setSampling(active, message = 'Filling particle volume…') {
     state.sampling = active; $('loading').hidden = !active; $('loading-label').textContent = message;
-    $('export').disabled = active || !state.result; $('resample').disabled = active;
-    $('compute-status').lastChild.textContent = active ? ' Sampling' : ' Live';
-    updateProfileExport();
+    $('resample').disabled = active;
+    setComputeStatus(active ? 'Sampling' : state.result ? 'Live' : 'Updating');
+    updateExports();
   }
-  function updateProfileExport() { $('export-profiles').disabled = state.sampling || state.busy || !!state.pending || !state.result || !state.isotropic; }
+  // A completed frame is an immutable export snapshot, even while the next
+  // orientation is in flight. Only replacing the point set invalidates it.
+  function updateExports() {
+    const unavailable = state.sampling || !state.result;
+    for (const [id, disabled] of [['export', unavailable], ['export-profiles', unavailable || !state.isotropic]]) {
+      if ($(id).disabled !== disabled) $(id).disabled = disabled;
+    }
+  }
   function stopIsotropic() {
     isotropicId++;
     if (isotropicWorker) isotropicWorker.terminate();
-    isotropicWorker = null; state.isotropic = null; updateProfileExport();
+    isotropicWorker = null; state.isotropic = null; updateExports();
   }
   function calculateIsotropic() {
     if (!state.points || state.sampling) return;
@@ -47,7 +58,7 @@
       $('isotropic-status').textContent = `Ready · ${fmt(data.directions)} directions · fixed during rotation`;
       $('isotropic-status').dataset.ready = 'true';
       isotropicWorker.terminate(); isotropicWorker = null;
-      drawProfile(); updateProfileExport();
+      drawProfile(); updateExports();
     };
     isotropicWorker.onerror = () => { if (id === isotropicId) { $('isotropic-status').textContent = 'Isotropic worker stopped. Change accuracy or resample to retry.'; isotropicWorker.terminate(); isotropicWorker = null; } };
     // Cover the entire qD slider once. Rotation, zoom, q range, detector size and
@@ -60,28 +71,29 @@
     state.busy = false; state.pending = null;
     calcWorker.onmessage = ({data}) => {
       state.busy = false;
-      if (data.type === 'error') { notice(data.message, true); $('compute-status').lastChild.textContent = ' Error'; $('export').disabled = true; }
+      if (data.type === 'error') { notice(data.message, true); state.result = null; setComputeStatus('Error'); }
       if (data.type === 'result') {
         state.result = data;
         $('metric-time').textContent = `${data.ms.toFixed(1)} ms`;
-        $('compute-status').lastChild.textContent = state.pending ? ' Updating' : ' Live';
-        $('export').disabled = state.sampling || !!state.pending;
+        setComputeStatus('Live');
+        $('compute-status').dataset.frameId = String(data.id);
         drawDetectors(); drawProfile();
       }
       if (state.pending) { const next = state.pending; state.pending = null; sendCalculation(next); }
-      updateProfileExport();
+      updateExports();
     };
-    calcWorker.onerror = () => { state.busy = false; notice('The calculation worker stopped. Reload this page to restart.', true); $('compute-status').lastChild.textContent = ' Error'; };
+    calcWorker.onerror = () => { state.busy = false; state.result = null; notice('The calculation worker stopped. Reload this page to restart.', true); setComputeStatus('Error'); updateExports(); };
   }
-  function sendCalculation(job) { state.busy = true; updateProfileExport(); calcWorker.postMessage(job); }
+  function sendCalculation(job) { state.busy = true; calcWorker.postMessage(job); }
   function calculate() {
     if (!state.points || state.sampling) return;
     const job = {type: 'calculate', id: ++state.requestId, angles: [...state.angles], matrix: SAS.rotationMatrix(state.angles), size: Number($('resolution').value), qMaxD: Number($('q-range').value)};
-    $('compute-status').lastChild.textContent = ' Updating'; $('export').disabled = true;
+    if (!state.result) setComputeStatus('Updating');
     if (state.busy) state.pending = job; else sendCalculation(job);
   }
   async function loadModel(newModel = false) {
     const version = ++state.sampleVersion;
+    state.result = null;
     if (sampleWorker) sampleWorker.terminate();
     stopIsotropic(); $('isotropic-status').textContent = 'Waiting for model…'; $('isotropic-status').dataset.ready = 'false';
     state.auto = false; updateAutoButton();
@@ -100,9 +112,9 @@
         if (version !== state.sampleVersion) return;
         if (data.type === 'progress') { $('loading-label').textContent = data.text; return; }
         if (data.type === 'error') {
-          setSampling(false); notice(data.message, true); $('compute-status').lastChild.textContent = ' Import failed';
+          setSampling(false); notice(data.message, true); setComputeStatus('Import failed');
           state.points = null; state.result = null; modelData = null; modelDirty = true; clearOutputs();
-          $('export').disabled = true; sampleWorker.terminate(); return;
+          updateExports(); sampleWorker.terminate(); return;
         }
         if (data.type !== 'sampled') return;
         state.points = data.points; state.display = data.display; state.stats = data.stats;
@@ -126,7 +138,7 @@
       sampleWorker.onerror = () => { setSampling(false); notice('Model worker could not start. Open this HTML file in a current Chrome, Edge, Firefox, or Safari browser.', true); };
       const job = {type: 'sample', count: Number($('point-count').value), seed: state.seed, shape: state.shape, name: state.file?.name, buffer};
       sampleWorker.postMessage(job, buffer ? [buffer] : []);
-    } catch (error) { setSampling(false); notice(error.message, true); state.points = null; state.result = null; modelData = null; modelDirty = true; clearOutputs(); $('export').disabled = true; }
+    } catch (error) { setSampling(false); notice(error.message, true); state.points = null; state.result = null; modelData = null; modelDirty = true; clearOutputs(); updateExports(); }
   }
   function clearOutputs() {
     for (let p = 0; p < 3; p++) { const c = $(`plane-${p}`); c.getContext('2d').clearRect(0, 0, c.width, c.height); }
@@ -384,7 +396,7 @@
     download(rows.join('\n') + '\n', 'stl2sas-profiles.csv', 'text/csv;charset=utf-8');
   });
   $('export').addEventListener('click', () => {
-    if (!state.result) return;
+    if (!state.result || state.sampling) return;
     const {size, qMaxD, planes, count, angles} = state.result;
     const metadata = [
       '# STL2SAS 0.1; normalized single-particle intensity; uniform contrast; FFT approximation',

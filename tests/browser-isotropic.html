@@ -22,19 +22,21 @@ button.addEventListener('click',async()=>{
         doc.addEventListener('click',capture,true);doc.getElementById('export-profiles').click();
       });
     }
-    const before=await exported(),id=status.dataset.calculationId;
+    const before=await exported(),id=status.dataset.calculationId,compute=doc.getElementById('compute-status');
     const rows=(text,kind)=>text.split('\n').filter(row=>row.startsWith(kind+','));
+    const beforeFrame=Number(compute.dataset.frameId);
     const input=doc.getElementById('angle-x');input.value=75;input.dispatchEvent(new win.Event('input',{bubbles:true}));input.dispatchEvent(new win.Event('change',{bubbles:true}));
-    await waitUntil(ready);
+    await waitUntil(()=>ready()&&Number(compute.dataset.frameId)>beforeFrame);
     const after=await exported();
     if(rows(before,'isotropic').length<20)throw Error('Isotropic export missing');
     if(rows(before,'isotropic').join('\n')!==rows(after,'isotropic').join('\n'))throw Error('Isotropic values changed with rotation');
     if(rows(before,'XY_azimuthal').join('\n')===rows(after,'XY_azimuthal').join('\n'))throw Error('Plane average did not follow rotation');
     if(status.dataset.calculationId!==id)throw Error('Rotation restarted isotropic worker');
+    const rotationFrame=Number(compute.dataset.frameId);
     const range=doc.getElementById('q-range');range.value=64;range.dispatchEvent(new win.Event('input',{bubbles:true}));
     const resolution=doc.getElementById('resolution');resolution.value='256';resolution.dispatchEvent(new win.Event('change',{bubbles:true}));
     const span=doc.getElementById('size-value');span.value=200;span.dispatchEvent(new win.Event('change',{bubbles:true}));
-    await waitUntil(ready);
+    await waitUntil(()=>ready()&&Number(compute.dataset.frameId)>rotationFrame&&doc.getElementById('plane-0').width===256);
     if(status.dataset.calculationId!==id)throw Error('q range, detector size or span restarted isotropic worker');
     const beforeResample=await exported();
     doc.getElementById('resample').click();
