@@ -15,6 +15,7 @@ button.addEventListener('click',async()=>{
     const doc=frame.contentDocument,win=frame.contentWindow,status=doc.getElementById('isotropic-status');
     const ready=()=>status.dataset.ready==='true'&&!doc.getElementById('export-profiles').disabled;
     await waitUntil(ready);
+    if(doc.getElementById('isotropic-quality').value!=='quick'||!status.textContent.includes('40 directions'))throw Error('Default is not the 40-direction quick average');
     const auto=doc.getElementById('auto-rotate');if(auto.getAttribute('aria-pressed')==='true')auto.click();
     async function exported(){
       return new Promise((resolve,reject)=>{
@@ -30,6 +31,7 @@ button.addEventListener('click',async()=>{
     await waitUntil(()=>ready()&&Number(compute.dataset.frameId)>beforeFrame);
     const after=await exported();
     if(rows(before,'isotropic').length<20)throw Error('Isotropic export missing');
+    if(!before.includes('isotropic_method=Fibonacci_sphere_1D_FFT; quality=quick; directions=40;'))throw Error('Quick export method metadata is incorrect');
     if(rows(before,'isotropic').join('\n')!==rows(after,'isotropic').join('\n'))throw Error('Isotropic values changed with rotation');
     if(rows(before,'XY_azimuthal').join('\n')===rows(after,'XY_azimuthal').join('\n'))throw Error('Plane average did not follow rotation');
     if(status.dataset.calculationId!==id)throw Error('Rotation restarted isotropic worker');
@@ -47,7 +49,7 @@ button.addEventListener('click',async()=>{
     const quality=doc.getElementById('isotropic-quality'),resampledId=status.dataset.calculationId;quality.value='fast';quality.dispatchEvent(new win.Event('change',{bubbles:true}));
     await waitUntil(()=>ready()&&status.dataset.calculationId!==resampledId);
     if(!status.textContent.includes('512'))throw Error('Accuracy change was not applied');
-    output.textContent='PASS — isotropic CSV unchanged by rotation; plane CSV changes; cache reused for q/grid/scale; resampling and accuracy restart it';
+    output.textContent='PASS — default 40-direction Fibonacci average and CSV metadata; isotropic fixed during rotation; cache reused; resampling and denser accuracy work';
     output.dataset.pass='true';button.disabled=false;
   }catch(error){output.textContent='FAIL — '+error.message;button.disabled=false;}
 });

@@ -347,7 +347,7 @@
     for (let i = 0; i < points.length; i += 3) { const phase = q[0] * points[i] + q[1] * points[i + 1] + q[2] * points[i + 2]; re += Math.cos(phase); im += Math.sin(phase); }
     return (re * re + im * im) / (points.length / 3) ** 2;
   }
-  const ISOTROPIC_QUALITIES = {fast: [16, 64], balanced: [32, 128], fine: [64, 256]};
+  const ISOTROPIC_QUALITIES = {quick: {directions: 40}, fast: {polarOrder: 16, azimuthCount: 64}, balanced: {polarOrder: 32, azimuthCount: 128}, fine: {polarOrder: 64, azimuthCount: 256}};
   const gaussRules = new Map();
   function gaussLegendre(order) {
     if (!Number.isInteger(order) || order < 2 || order > 128) throw Error('Invalid angular quadrature order.');
@@ -368,15 +368,50 @@
     const rule = {nodes, weights}; gaussRules.set(order, rule); return rule;
   }
 
+  const directionRules = new Map();
+  function isotropicDirectionRule(quality = 'quick') {
+    if (!Object.hasOwn(ISOTROPIC_QUALITIES, quality)) throw Error('Unknown isotropic accuracy.');
+    if (directionRules.has(quality)) return directionRules.get(quality);
+    const options = ISOTROPIC_QUALITIES[quality];
+    const polarOrder = options.polarOrder || null, azimuthCount = options.azimuthCount || null;
+    const directions = options.directions || polarOrder / 2 * azimuthCount;
+    const vectors = new Float64Array(directions * 3), weights = new Float64Array(directions);
+    const method = options.directions ? 'Fibonacci_sphere' : 'Gauss-Legendre_polar_x_uniform_azimuth';
+    if (options.directions) {
+      // Equal-area latitude bands and golden-angle azimuths avoid polar clustering.
+      // Deterministic directions keep recalculations reproducible without pairs.
+      const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+      for (let i = 0; i < directions; i++) {
+        const z = 1 - 2 * (i + .5) / directions, radial = Math.sqrt(1 - z * z), angle = i * goldenAngle;
+        vectors.set([radial * Math.cos(angle), radial * Math.sin(angle), z], i * 3);
+        weights[i] = 1 / directions;
+      }
+    } else {
+      // I(q)=I(-q) for real uniform contrast: the positive hemisphere suffices.
+      const rule = gaussLegendre(polarOrder);
+      let weightSum = 0, i = 0;
+      for (let p = polarOrder / 2; p < polarOrder; p++) weightSum += rule.weights[p];
+      for (let p = polarOrder / 2; p < polarOrder; p++) {
+        const z = rule.nodes[p], radial = Math.sqrt(1 - z * z);
+        for (let a = 0; a < azimuthCount; a++, i++) {
+          const angle = TAU * a / azimuthCount;
+          vectors.set([radial * Math.cos(angle), radial * Math.sin(angle), z], i * 3);
+          weights[i] = rule.weights[p] / (azimuthCount * weightSum);
+        }
+      }
+    }
+    const result = {vectors, weights, directions, method, polarOrder, azimuthCount};
+    directionRules.set(quality, result); return result;
+  }
+
   // Orientational average of INTENSITY, not amplitude, using all original points.
   // Each direction needs one O(N) projection and one small 1D FFT. The particle
   // stays in its body frame: display rotations never enter this calculation.
-  function isotropicScattering(points, qMaxD = 120, quality = 'balanced', progress = () => {}) {
-    const count = points.length / 3, orders = ISOTROPIC_QUALITIES[quality];
+  function isotropicScattering(points, qMaxD = 120, quality = 'quick', progress = () => {}) {
+    const count = points.length / 3;
     if (!Number.isInteger(count) || !count) throw Error('No scattering points.');
     if (!(qMaxD >= 4 && qMaxD <= 120)) throw Error('qD must be between 4 and 120.');
-    if (!orders) throw Error('Unknown isotropic accuracy.');
-    const [polarOrder, azimuthCount] = orders, rule = gaussLegendre(polarOrder);
+    const {vectors, weights, directions, method, polarOrder, azimuthCount} = isotropicDirectionRule(quality);
     // Eight-fold real-space oversampling; zero padding yields 513 radial q values.
     const gridSize = 8192, bins = gridSize / 16 + 1, scale = 8 * qMaxD / Math.PI;
     const dq = 2 * Math.PI * scale / gridSize, qD = new Float64Array(bins), intensity = new Float64Array(bins);
@@ -389,31 +424,22 @@
       radius = Math.max(radius, Math.hypot(centered[i], centered[i + 1], centered[i + 2]));
     }
     if (!Number.isFinite(radius) || radius >= gridSize / 2 - 2) throw Error('Point cloud exceeds the isotropic projection box.');
-    const directions = polarOrder / 2 * azimuthCount;
-    if (radius < 1e-12) { intensity.fill(1); progress(1); return {qD, intensity, count, qMaxD, quality, directions, polarOrder, azimuthCount, gridSize}; }
-    let weightSum = 0;
-    for (let p = polarOrder / 2; p < polarOrder; p++) weightSum += rule.weights[p];
+    if (radius < 1e-12) { intensity.fill(1); progress(1); return {qD, intensity, count, qMaxD, quality, directions, method, polarOrder, azimuthCount, gridSize}; }
     const norm = 1 / (count * count), tick = Math.max(1, Math.floor(directions / 100));
-    let completed = 0;
-    // I(q)=I(-q) for real uniform contrast: the positive hemisphere suffices.
-    for (let p = polarOrder / 2; p < polarOrder; p++) {
-      const nz = rule.nodes[p], radial = Math.sqrt(1 - nz * nz), weight = rule.weights[p] / (azimuthCount * weightSum);
-      for (let a = 0; a < azimuthCount; a++) {
-        const angle = TAU * a / azimuthCount, nx = radial * Math.cos(angle), ny = radial * Math.sin(angle);
-        real.fill(0); imag.fill(0);
-        for (let i = 0; i < centered.length; i += 3) {
-          const x = nx * centered[i] + ny * centered[i + 1] + nz * centered[i + 2] + gridSize / 2;
-          const ix = Math.floor(x), fraction = x - ix;
-          real[ix] += 1 - fraction; real[ix + 1] += fraction;
-        }
-        fft1D(real, imag, 0, 1, gridSize, plan);
-        for (let k = 0; k < bins; k++) intensity[k] += weight * (real[k] * real[k] + imag[k] * imag[k]) * norm * correction[k];
-        completed++;
-        if (completed % tick === 0 || completed === directions) progress(completed / directions);
+    for (let direction = 0; direction < directions; direction++) {
+      const nx = vectors[direction * 3], ny = vectors[direction * 3 + 1], nz = vectors[direction * 3 + 2], weight = weights[direction];
+      real.fill(0); imag.fill(0);
+      for (let i = 0; i < centered.length; i += 3) {
+        const x = nx * centered[i] + ny * centered[i + 1] + nz * centered[i + 2] + gridSize / 2;
+        const ix = Math.floor(x), fraction = x - ix;
+        real[ix] += 1 - fraction; real[ix + 1] += fraction;
       }
+      fft1D(real, imag, 0, 1, gridSize, plan);
+      for (let k = 0; k < bins; k++) intensity[k] += weight * (real[k] * real[k] + imag[k] * imag[k]) * norm * correction[k];
+      if ((direction + 1) % tick === 0 || direction + 1 === directions) progress((direction + 1) / directions);
     }
     intensity[0] = 1;
-    return {qD, intensity, count, qMaxD, quality, directions, polarOrder, azimuthCount, gridSize};
+    return {qD, intensity, count, qMaxD, quality, directions, method, polarOrder, azimuthCount, gridSize};
   }
   function pointStats(points) {
     const mean = [0, 0, 0], count = points.length / 3;
@@ -421,7 +447,7 @@
     let rg2 = 0; for (let i = 0; i < points.length; i++) rg2 += (points[i] - mean[i % 3]) ** 2 / count;
     return {mean, rg: Math.sqrt(rg2)};
   }
-  const api = {MAX_FACES, random, parseSTL, parseOBJ, prepareMesh, checkClosed, buildBVH, pointInside, buildVolumeProposal, sampleMesh, sampleShape, rotationMatrix, rotatePoints, fft2D, ScatteringEngine, directIntensity, pointStats, ISOTROPIC_QUALITIES, gaussLegendre, isotropicScattering};
+  const api = {MAX_FACES, random, parseSTL, parseOBJ, prepareMesh, checkClosed, buildBVH, pointInside, buildVolumeProposal, sampleMesh, sampleShape, rotationMatrix, rotatePoints, fft2D, ScatteringEngine, directIntensity, pointStats, ISOTROPIC_QUALITIES, gaussLegendre, isotropicDirectionRule, isotropicScattering};
   root.SAS = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : self);

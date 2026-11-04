@@ -10,6 +10,39 @@ function debye(points, q) {
   }
   return sum/(n*n);
 }
+test('The default 40 directions cover equal-area bands on the full sphere',()=>{
+  const rule=SAS.isotropicDirectionRule();
+  assert.equal(rule.directions,40); assert.equal(rule.method,'Fibonacci_sphere');
+  near(rule.weights.reduce((sum,w)=>sum+w,0),1,1e-12);
+  for(let i=0;i<40;i++) {
+    near(Math.hypot(...rule.vectors.subarray(i*3,i*3+3)),1,1e-12);
+    near(rule.weights[i],1/40,1e-12);
+    near(rule.vectors[i*3+2],1-2*(i+.5)/40,1e-12);
+  }
+  // Nearly isotropic first and second moments, including off-diagonal terms.
+  for(let a=0;a<3;a++) {
+    let mean=0;for(let i=0;i<40;i++)mean+=rule.weights[i]*rule.vectors[i*3+a];
+    near(mean,0,.002);
+    for(let b=a;b<3;b++) {
+      let moment=0;for(let i=0;i<40;i++)moment+=rule.weights[i]*rule.vectors[i*3+a]*rule.vectors[i*3+b];
+      near(moment,a===b?1/3:0,.004);
+    }
+  }
+});
+test('The 40-direction default averages direct intensities using the full point cloud',()=>{
+  const points=SAS.sampleShape('cube',48,123).points,progress=[];
+  const result=SAS.isotropicScattering(points,120,undefined,value=>progress.push(value));
+  const rule=SAS.isotropicDirectionRule();
+  assert.equal(result.quality,'quick');assert.equal(result.directions,40);assert.equal(result.count,48);
+  assert.equal(result.intensity[0],1);near(result.qD.at(-1),120,1e-10);
+  assert.ok(result.intensity.every(value=>Number.isFinite(value)&&value>=0));
+  for(const k of [0,8,32,64,128,256,512]) {
+    let expected=0;
+    for(let i=0;i<40;i++)expected+=rule.weights[i]*SAS.directIntensity(points,Array.from(rule.vectors.subarray(i*3,i*3+3),v=>v*result.qD[k]));
+    near(result.intensity[k],expected,.00001,`40-direction qD=${result.qD[k]}`);
+  }
+  assert.equal(progress.length,40);assert.equal(progress.at(-1),1);
+});
 test('Spherical quadrature has correct solid-angle weights',()=>{
   for(const n of [16,32,64]) {
     const {nodes,weights}=SAS.gaussLegendre(n);
@@ -46,10 +79,12 @@ test('Numerical isotropic intensity is invariant under point-cloud rotation and 
 });
 test('The isotropic sphere agrees with the analytic continuum form factor including finite-point self terms',()=>{
   const n=30000,points=SAS.sampleShape('sphere',n,42).points;
-  const result=SAS.isotropicScattering(points,120,'balanced');
-  for(let k=1;result.qD[k]<=16;k++) {
-    const z=result.qD[k]*.5,amp=3*(Math.sin(z)-z*Math.cos(z))/z**3;
-    near(result.intensity[k],1/n+(1-1/n)*amp*amp,.003,`qR=${z}`);
+  for(const quality of ['quick','balanced']) {
+    const result=SAS.isotropicScattering(points,120,quality);
+    for(let k=1;result.qD[k]<=16;k++) {
+      const z=result.qD[k]*.5,amp=3*(Math.sin(z)-z*Math.cos(z))/z**3;
+      near(result.intensity[k],1/n+(1-1/n)*amp*amp,.003,`${quality} qR=${z}`);
+    }
   }
   const single=SAS.isotropicScattering(new Float32Array([2,3,4]),120,'fast');
   assert.ok(single.intensity.every(value=>value===1));

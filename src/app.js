@@ -390,7 +390,8 @@
       `# model=${JSON.stringify(state.file ? state.file.name : names[state.shape])}; N=${iso.count}; seed=${state.seed}`,
       `# longest_span=${length()}; length_unit=${unit()}; plane_rotation_xyz_degrees=${state.result.angles.join(' ')}`,
       `# displayed_qD_max=${state.result.qMaxD}; cached_isotropic_qD_max=${iso.qMaxD}`,
-      `# isotropic_method=Gauss-Legendre_polar_x_uniform_azimuth_1D_FFT; quality=${iso.quality}; directions=${iso.directions}; polar_order=${iso.polarOrder}; azimuth_count=${iso.azimuthCount}; projection_fft=${iso.gridSize}`,
+      `# isotropic_method=${iso.method}_1D_FFT; quality=${iso.quality}; directions=${iso.directions}; projection_fft=${iso.gridSize}`,
+      ...(iso.polarOrder ? [`# polar_order=${iso.polarOrder}; azimuth_count=${iso.azimuthCount}`] : []),
       '# isotropic is cached in the original model frame; plane averages follow rotation',
       '# numerical angular integration and gridding are approximate; finite-point self terms retained',
       'profile,q,I_over_I0'
