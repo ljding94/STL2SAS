@@ -15,6 +15,7 @@ button.addEventListener('click',async()=>{
     const doc=frame.contentDocument,win=frame.contentWindow,status=doc.getElementById('isotropic-status');
     const ready=()=>status.dataset.ready==='true'&&!doc.getElementById('export-profiles').disabled;
     await waitUntil(ready);
+    const auto=doc.getElementById('auto-rotate');if(auto.getAttribute('aria-pressed')==='true')auto.click();
     async function exported(){
       return new Promise((resolve,reject)=>{
         const timer=setTimeout(()=>reject(Error('No profile export')),5000);

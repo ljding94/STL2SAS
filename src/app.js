@@ -5,7 +5,7 @@
   const names = {ellipsoid: 'Triaxial ellipsoid', sphere: 'Sphere', cube: 'Cube', cylinder: 'Cylinder'};
   const planeNames = ['XY', 'XZ', 'YZ'], plotColors = ['#197d62', '#7186cf', '#d59a4c'];
   const sourceURL = URL.createObjectURL(new Blob([$('worker-source').textContent], {type: 'text/javascript'}));
-  const state = {shape: 'ellipsoid', file: null, points: null, display: null, angles: [20, -25, 15], zoom: 1, result: null, isotropic: null, pending: null, busy: false, requestId: 0, seed: 42, sampling: false, auto: false, sampleVersion: 0};
+  const state = {shape: 'ellipsoid', file: null, points: null, display: null, angles: [20, -25, 15], zoom: 1, result: null, isotropic: null, pending: null, busy: false, requestId: 0, seed: 42, sampling: false, auto: true, sampleVersion: 0};
   let sampleWorker = null, calcWorker = null, isotropicWorker = null, isotropicId = 0, modelData = null, modelDirty = true;
   const fmt = n => new Intl.NumberFormat('en-US').format(n);
   const number = (n, digits = 3) => Math.abs(n) >= 10000 || (Math.abs(n) > 0 && Math.abs(n) < .001) ? n.toExponential(2) : Number(n.toPrecision(digits)).toString();
@@ -96,7 +96,7 @@
     state.result = null;
     if (sampleWorker) sampleWorker.terminate();
     stopIsotropic(); $('isotropic-status').textContent = 'Waiting for model…'; $('isotropic-status').dataset.ready = 'false';
-    state.auto = false; updateAutoButton();
+    updateAutoButton();
     notice(); setSampling(true);
     if (calcWorker) { calcWorker.terminate(); calcWorker = null; }
     state.busy = false; state.pending = null; state.requestId++;
@@ -303,7 +303,11 @@
     input.addEventListener('change', event => { const angle = Number(event.target.value); if (!Number.isFinite(angle)) return; const next = [...state.angles]; next[i] = angle; setAngles(next); });
   });
   $('reset-view').addEventListener('click', () => { state.zoom = 1; setAngles([0, 0, 0]); });
-  function updateAutoButton() { $('auto-rotate').textContent = state.auto ? 'Ⅱ Pause rotation' : '▷ Auto rotate'; $('auto-rotate').setAttribute('aria-pressed', String(state.auto)); }
+  function updateAutoButton() {
+    $('rotation-label').textContent = state.auto ? 'Pause rotation' : 'Start rotation';
+    $('rotation-icon').setAttribute('d', state.auto ? 'M6 4v12M14 4v12' : 'm6 3 10 7-10 7Z');
+    $('auto-rotate').setAttribute('aria-pressed', String(state.auto));
+  }
   $('auto-rotate').addEventListener('click', () => { state.auto = !state.auto; updateAutoButton(); });
   let previousFrame = 0, previousAuto = 0;
   function frame(now) {

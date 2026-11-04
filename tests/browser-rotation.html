@@ -17,6 +17,8 @@ button.addEventListener('click',async()=>{
     const status=doc.getElementById('compute-status'),dataButton=doc.getElementById('export'),profilesButton=doc.getElementById('export-profiles'),auto=doc.getElementById('auto-rotate');
     const ready=()=>doc.getElementById('isotropic-status').dataset.ready==='true'&&!profilesButton.disabled;
     await waitUntil(ready);
+    if(auto.getAttribute('aria-pressed')!=='true'||!auto.textContent.includes('Pause rotation'))throw Error('Rotation did not start by default');
+    if(auto.getBoundingClientRect().height<44)throw Error('Pause control is too small');
     function exported(id,filename){
       return new Promise((resolve,reject)=>{
         const timer=setTimeout(()=>{doc.removeEventListener('click',capture,true);reject(Error('No export: '+filename));},5000);
@@ -30,7 +32,6 @@ button.addEventListener('click',async()=>{
     observe(dataButton,{attributes:true,attributeFilter:['disabled']});
     observe(profilesButton,{attributes:true,attributeFilter:['disabled']});
     const startFrame=Number(status.dataset.frameId),startAngle=doc.getElementById('angle-y').value;
-    auto.click();
     await waitUntil(()=>Number(status.dataset.frameId)>=startFrame+8);
     await delay(750);
     // Both exports capture a complete frame synchronously, even if a later
@@ -44,12 +45,21 @@ button.addEventListener('click',async()=>{
     if(status.textContent.trim()!=='Live'||dataButton.disabled||profilesButton.disabled)throw Error('Controls are not live during rotation');
     auto.click();
     await delay(250);
+    const pausedAngle=doc.getElementById('angle-y').value;
+    await delay(250);
+    if(auto.getAttribute('aria-pressed')!=='false'||!auto.textContent.includes('Start rotation')||doc.getElementById('angle-y').value!==pausedAngle)throw Error('Pause did not stop rotation');
+    const pausedFrame=Number(status.dataset.frameId);
+    auto.click();
+    await waitUntil(()=>Number(status.dataset.frameId)>=pausedFrame+4);
+    auto.click();
+    await delay(250);
     if(changes.length)throw Error('Live/export controls flickered: '+changes.join(', '));
     observers.forEach(observer=>observer.disconnect());
     doc.getElementById('resample').click();
     if(!dataButton.disabled||!profilesButton.disabled)throw Error('Old point-set results remained exportable during resampling');
     await waitUntil(ready);
-    output.textContent='PASS — 8+ live frames; no Live/disabled mutations; both CSV exports work during rotation with matching orientation; resampling safely disables exports';
+    if(auto.getAttribute('aria-pressed')!=='false')throw Error('Resampling lost the paused preference');
+    output.textContent='PASS — rotation starts automatically; 44px pause control; pause/resume works; 8+ live frames without flicker; matching CSV exports; resampling preserves pause';
     output.dataset.pass='true';
   }catch(error){output.textContent='FAIL — '+error.message;}
   finally{observers.forEach(observer=>observer.disconnect());const auto=doc.getElementById('auto-rotate');if(auto?.getAttribute('aria-pressed')==='true')auto.click();button.disabled=false;}
