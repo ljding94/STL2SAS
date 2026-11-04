@@ -1,9 +1,10 @@
 # Example model files
 
-Select **Torus · STL** or **Angle block · STL** in the app to load a real file immediately. The **Download STL** buttons save the same files, so you can also test drag and drop. Both files are embedded in `index.html`; examples work offline even if you copy just that one HTML file.
+Every STL and OBJ in this folder is selectable in the app, including **Toy car · STL**, the downloaded torus/angle block, and all generated mesh files. Select a file, then use **Download selected model file** to save it and test dragging it back onto the upload area. All seven mesh examples are embedded in `index.html` and work offline, even when you copy just that one HTML file. The four analytic solids are listed separately.
 
 | File | Description | Triangles | Source |
 | --- | --- | ---: | --- |
+| `toy-car.stl` | Detailed, hollow toy car, voxel-remeshed for closed-volume sampling | 27,998 | Derived from Khronos' CC0 ToyCar scene |
 | `trimesh-torus.stl` | A closed torus with a through-hole | 8,700 | Downloaded from Trimesh |
 | `trimesh-angle-block.stl` | An asymmetric mechanical angle block | 704 | Downloaded from Trimesh |
 | `ellipsoid.stl` | Triaxial ellipsoid, native spans 100 × 54 × 36 | 2,208 | Generated for this project |
@@ -12,6 +13,14 @@ Select **Torus · STL** or **Angle block · STL** in the app to load a real file
 | `concave-L.obj` | A concave L-shaped prism | 20 after triangulation | Generated for this project |
 
 Both downloaded files are unmodified and pass the app's closed-edge checks and volume sampler. Native coordinates are retained; STL does not encode a physical unit. Assign your desired length unit and longest span in the app.
+
+The car is a modified derivative. Its fabric display base and materials were removed; body and glass were combined; a 1.5-unit inward wall thickness was added to retain zero-thickness display panels during voxel conversion; and the mesh was simplified to about 28,000 triangles. Remaining cavities are sampled as empty space. The result is normalized to a longest span of 160 model units; this is a chosen display scale. It automatically selects 50,000 scattering points to make its thin features easier to see. [Toy-car credits and CC0 notice](TOY-CAR-LICENSE.txt).
+
+Car source: [KhronosGroup/glTF-Sample-Assets, ToyCar](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/ToyCar), by Guido Odendahl and Eric Chadwick, under CC0 1.0. The pinned source GLB has SHA-256 `01a60862de55cd4b9f3acfab0b0def86451800f9c42467fcd61052c16cb9838c`; the converted STL has SHA-256 `57efd4f64fa573438fe21d5b72e3b4dcd9f189ff4a64fd1fb352a021aad49030`.
+
+To reproduce the conversion, download that commit's `Models/ToyCar/glTF-Binary/ToyCar.glb`, then run Blender 4.1 with `--background --factory-startup --python scripts/prepare-toy-car.py -- /path/to/ToyCar.glb examples/toy-car.stl`. Blender is only needed to regenerate this example, not to build, host, or use the app.
+
+`catalog.json` is the single list used to generate the example menu and embed assets. The build fails if an STL/OBJ file is missing from the catalog, so bundled models cannot silently disappear from the selector.
 
 ## Download provenance and attribution
 

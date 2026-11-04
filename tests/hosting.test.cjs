@@ -27,13 +27,26 @@ test('Portable HTML embeds exact example files and preserves their license', () 
   const match = html.match(/<script id="example-data" type="application\/json">([\s\S]*?)<\/script>/);
   assert.ok(match, 'embedded model catalog');
   const examples = JSON.parse(match[1]);
-  assert.deepEqual(Object.keys(examples), ['stl-torus', 'stl-angle-block']);
+  const catalog = JSON.parse(fs.readFileSync(path.join(root, 'examples/catalog.json'), 'utf8'));
+  assert.deepEqual(Object.keys(examples), catalog.map(entry => entry.id));
+  assert.deepEqual(catalog.map(entry => entry.filename).sort(), fs.readdirSync(path.join(root, 'examples')).filter(name => /\.(stl|obj)$/i.test(name)).sort());
   for (const sample of Object.values(examples)) {
     assert.deepEqual(Buffer.from(sample.base64, 'base64'), fs.readFileSync(path.join(root, 'examples', sample.filename)));
-    assert.match(sample.license, /Copyright \(c\) 2023 Michael Dawson-Haggerty/);
-    assert.match(sample.license, /Permission is hereby granted/);
+    assert.ok(html.includes(`value="${sample.id}"`), `${sample.filename} is selectable`);
+    if (sample.licenseFile) assert.equal(sample.license, fs.readFileSync(path.join(root, 'examples', sample.licenseFile), 'utf8'));
   }
   assert.ok(!html.includes('/*__'), 'no unexpanded build placeholders');
+});
+
+test('Every catalog example is a valid closed mesh with nonempty volume', () => {
+  const catalog = JSON.parse(fs.readFileSync(path.join(root, 'examples/catalog.json'), 'utf8'));
+  for (const entry of catalog) {
+    const bytes = fs.readFileSync(path.join(root, 'examples', entry.filename));
+    const mesh = SAS.prepareMesh(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), entry.filename);
+    const {points, volume} = SAS.sampleMesh(mesh, 1000, 42);
+    assert.equal(points.length, 3000, entry.filename);
+    assert.ok(volume > 0, entry.filename);
+  }
 });
 
 test('Cloudflare build publishes only intended assets and the same portable HTML', () => {

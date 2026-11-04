@@ -112,7 +112,7 @@
   // Canvas renderer keeps every browser dependency inside the portable HTML.
   const modelCanvas = $('model-canvas'), modelCtx = modelCanvas.getContext('2d');
   function prepareRenderingData() {
-    const count = Math.min(state.points.length / 3, 7000), stride = Math.max(1, Math.floor(state.points.length / 3 / count));
+    const count = Math.min(state.points.length / 3, 12000), stride = Math.max(1, Math.floor(state.points.length / 3 / count));
     const points = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) points.set(state.points.subarray(i * stride * 3, i * stride * 3 + 3), i * 3);
     modelData = {points}; modelDirty = true;
@@ -124,7 +124,7 @@
     return false;
   }
   // Camera is fixed in lab space; the particle rotation alone changes scattering.
-  const camera = SAS.rotationMatrix([17, -20, -9]);
+  const camera = SAS.rotationMatrix([-25, -20, -9]);
   function cameraPoint(x, y, z) { return [camera[0] * x + camera[1] * y + camera[2] * z, camera[3] * x + camera[4] * y + camera[5] * z, camera[6] * x + camera[7] * y + camera[8] * z]; }
   function drawModel() {
     fitCanvas(modelCanvas);
@@ -265,26 +265,32 @@
   function acceptFile(file, exampleKey = 'custom') {
     if (!file) return;
     if (!/\.(stl|obj)$/i.test(file.name)) { notice('Choose an STL or OBJ model. More formats can be added in a future version.', true); return; }
-    state.file = file; state.shape = null; $('example').value = exampleKey; loadModel(true);
+    state.file = file; state.shape = null; $('example').value = exampleKey; $('download-example').disabled = false; loadModel(true);
   }
-  $('file-input').addEventListener('change', event => { acceptFile(event.target.files[0]); event.target.value = ''; });
-  let dragDepth = 0;
-  document.addEventListener('dragenter', event => { if (!Array.from(event.dataTransfer.types).includes('Files')) return; event.preventDefault(); dragDepth++; $('drop-overlay').hidden = false; });
-  document.addEventListener('dragover', event => { if (Array.from(event.dataTransfer.types).includes('Files')) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } });
-  document.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $('drop-overlay').hidden = true; });
-  document.addEventListener('drop', event => { event.preventDefault(); dragDepth = 0; $('drop-overlay').hidden = true; acceptFile(event.dataTransfer.files[0]); });
+  function acceptFiles(files) { acceptFile(Array.from(files).find(file => /\.(stl|obj)$/i.test(file.name)) || files[0]); }
+  $('file-input').addEventListener('change', event => { acceptFiles(event.target.files); event.target.value = ''; });
+  const removeFileDrop = ModelFileDrop.install({
+    zone: $('drop-zone'), surface: window, onFiles: acceptFiles,
+    onDragState: active => {
+      $('drop-title').textContent = active ? 'Release to load your model' : 'Drag & drop your model';
+      $('drop-subtitle').textContent = active ? 'Drop an STL or OBJ file here' : 'STL or OBJ · or click to browse';
+    }
+  });
   function exampleFile(key) {
     const sample = examples[key], bytes = Uint8Array.from(atob(sample.base64), c => c.charCodeAt(0));
-    return new File([bytes], sample.filename, {type: 'model/stl'});
+    return new File([bytes], sample.filename, {type: sample.filename.toLowerCase().endsWith('.stl') ? 'model/stl' : 'text/plain'});
   }
   $('example').addEventListener('change', event => {
     const key = event.target.value;
-    if (examples[key]) { acceptFile(exampleFile(key), key); return; }
-    state.shape = key; state.file = null; $('unit').value = 'nm'; loadModel(true);
+    if (examples[key]) {
+      const entry = examples[key];
+      if (entry.recommendedPoints) $('point-count').value = String(entry.recommendedPoints);
+      if (entry.orientation) setAngles(entry.orientation);
+      acceptFile(exampleFile(key), key); return;
+    }
+    state.shape = key; state.file = null; $('download-example').disabled = true; $('unit').value = 'nm'; loadModel(true);
   });
-  for (const [id, key] of [['download-torus', 'stl-torus'], ['download-angle-block', 'stl-angle-block']]) {
-    $(id).addEventListener('click', () => download(exampleFile(key), examples[key].filename, 'model/stl'));
-  }
+  $('download-example').addEventListener('click', () => { if (state.file) download(state.file, state.file.name, state.file.type); });
   $('point-count').addEventListener('change', () => { $('point-label').textContent = fmt(Number($('point-count').value)); loadModel(); });
   $('resample').addEventListener('click', () => { state.seed++; loadModel(); });
   $('resolution').addEventListener('change', () => { updateLabels(); calculate(); });
@@ -334,6 +340,6 @@
     for (let p = 0; p < 3; p++) for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) rows.push(`${planeNames[p]},${((x - size / 2) * 2 * qMaxD / size / length()).toPrecision(9)},${((y - size / 2) * 2 * qMaxD / size / length()).toPrecision(9)},${planes[p][y * size + x].toExponential(8)}`);
     download(rows.join('\n') + '\n', 'stl2sas-planes.csv', 'text/csv;charset=utf-8');
   });
-  window.addEventListener('beforeunload', () => { if (sampleWorker) sampleWorker.terminate(); if (calcWorker) calcWorker.terminate(); URL.revokeObjectURL(sourceURL); });
+  window.addEventListener('beforeunload', () => { removeFileDrop(); if (sampleWorker) sampleWorker.terminate(); if (calcWorker) calcWorker.terminate(); URL.revokeObjectURL(sourceURL); });
   updateLabels(); loadModel();
 })();

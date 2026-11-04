@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>STL2SAS file-drop integration check</title>
+<style>body{font:14px system-ui;margin:20px;background:#f4f5f1;color:#203b2e}button{padding:12px}iframe{width:100%;height:800px;border:1px solid #bbb;margin-top:15px}output{margin-left:15px}</style>
+<h1>File-drop browser integration check</h1>
+<p>Development-only fixture: sends a real browser File and DataTransfer through the upload area's drag events.</p>
+<button id="run" disabled>Test dropping an STL file</button><output id="result">Loading app…</output>
+<iframe id="app" src="../index.html" title="STL2SAS app under test"></iframe>
+<script>
+const frame = document.getElementById('app'), button = document.getElementById('run'), output = document.getElementById('result');
+frame.addEventListener('load', () => { button.disabled = false; output.textContent = 'Ready'; });
+button.addEventListener('click', async () => {
+  try {
+    button.disabled = true;
+    const response = await fetch('../examples/cube.stl');
+    if (!response.ok) throw Error('Fixture STL could not be read');
+    const file = new File([await response.arrayBuffer()], 'browser-dropped-cube.stl', {type:'model/stl'});
+    const transfer = new DataTransfer(); transfer.items.add(file);
+    const doc = frame.contentDocument, win = frame.contentWindow, zone = doc.getElementById('drop-zone');
+    const enter = new win.DragEvent('dragenter', {bubbles:true,cancelable:true,dataTransfer:transfer});
+    zone.dispatchEvent(enter);
+    if (!enter.defaultPrevented || !zone.classList.contains('dragging')) throw Error('Upload area did not accept/highlight the file drag');
+    const over = new win.DragEvent('dragover', {bubbles:true,cancelable:true,dataTransfer:transfer}); zone.dispatchEvent(over);
+    const drop = new win.DragEvent('drop', {bubbles:true,cancelable:true,dataTransfer:transfer}); zone.dispatchEvent(drop);
+    if (!over.defaultPrevented || !drop.defaultPrevented) throw Error('Browser file navigation was not canceled');
+    const deadline = performance.now() + 20000;
+    while (performance.now() < deadline) {
+      if (doc.getElementById('model-name').textContent === file.name && doc.getElementById('compute-status').textContent.trim() === 'Live') {
+        if (zone.classList.contains('dragging')) throw Error('Drop highlight was not cleared');
+        output.textContent = 'PASS — dropped STL imported, volume sampled, all three planes calculated';
+        output.dataset.pass = 'true'; button.disabled = false; return;
+      }
+      if (!doc.getElementById('notice').hidden && doc.getElementById('notice').classList.contains('error')) throw Error(doc.getElementById('notice').textContent);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw Error('App did not complete the dropped file');
+  } catch (error) { output.textContent = 'FAIL — ' + error.message; button.disabled = false; }
+});
+</script></html>

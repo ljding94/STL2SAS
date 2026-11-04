@@ -191,20 +191,63 @@
     return (hits & 1) === 1;
   }
 
+  function buildVolumeProposal(triangles, tree, resolution = 32) {
+    const {min, max} = tree, step = max.map((x, a) => (x - min[a]) / resolution);
+    const boundary = new Uint8Array(resolution ** 3);
+    let marked = 0, markingWork = 0;
+    const index = (x, a) => Math.max(0, Math.min(resolution - 1, Math.floor((x - min[a]) / step[a])));
+    // Triangle AABBs conservatively retain every cell touching a surface. False
+    // positives cost time but cannot discard particle volume or bias sampling.
+    for (let t = 0; t < triangles.length; t += 9) {
+      const lo = [], hi = [];
+      for (let a = 0; a < 3; a++) {
+        lo[a] = index(Math.min(triangles[t + a], triangles[t + a + 3], triangles[t + a + 6]), a);
+        hi[a] = index(Math.max(triangles[t + a], triangles[t + a + 3], triangles[t + a + 6]), a);
+      }
+      markingWork += (hi[0] - lo[0] + 1) * (hi[1] - lo[1] + 1) * (hi[2] - lo[2] + 1);
+      if (markingWork > 2000000) return null; // Keep pathological triangle AABBs on the simple sampler.
+      for (let z = lo[2]; z <= hi[2]; z++) for (let y = lo[1]; y <= hi[1]; y++) for (let x = lo[0]; x <= hi[0]; x++) {
+        const i = (z * resolution + y) * resolution + x;
+        if (!boundary[i]) { boundary[i] = 1; marked++; }
+      }
+      if (marked === boundary.length) return null; // No empty space can be skipped.
+    }
+    const cells = [];
+    for (let z = 0; z < resolution; z++) for (let y = 0; y < resolution; y++) for (let x = 0; x < resolution; x++) {
+      const i = (z * resolution + y) * resolution + x;
+      // A cell without a surface crossing is wholly inside or wholly outside.
+      if (boundary[i] || pointInside(min[0] + (x + .5) * step[0], min[1] + (y + .5) * step[1], min[2] + (z + .5) * step[2], triangles, tree)) cells.push(i);
+    }
+    return {cells, step, resolution, volume: cells.length * step[0] * step[1] * step[2]};
+  }
+
   function sampleMesh(mesh, count, seed, progress = () => {}) {
     const tree = buildBVH(mesh.triangles), rng = random(seed), points = new Float32Array(count * 3);
     const {min, max} = tree, start = Date.now();
-    let accepted = 0, trials = 0;
+    let accepted = 0, trials = 0, proposal = null, proposalStartTrials = 0, proposalStartAccepted = 0;
     while (accepted < count) {
-      const x = min[0] + rng() * (max[0] - min[0]), y = min[1] + rng() * (max[1] - min[1]), z = min[2] + rng() * (max[2] - min[2]);
+      let x, y, z;
+      if (proposal) {
+        const {cells, step, resolution} = proposal, cell = cells[Math.floor(rng() * cells.length)];
+        const ix = cell % resolution, iy = Math.floor(cell / resolution) % resolution, iz = Math.floor(cell / (resolution * resolution));
+        x = min[0] + (ix + rng()) * step[0]; y = min[1] + (iy + rng()) * step[1]; z = min[2] + (iz + rng()) * step[2];
+      } else {
+        x = min[0] + rng() * (max[0] - min[0]); y = min[1] + rng() * (max[1] - min[1]); z = min[2] + rng() * (max[2] - min[2]);
+      }
       if (pointInside(x, y, z, mesh.triangles, tree)) { points[accepted * 3] = x; points[accepted * 3 + 1] = y; points[accepted * 3 + 2] = z; accepted++; }
       trials++;
+      if (trials === 2048 && count >= 5000 && accepted / trials < .35) {
+        progress(accepted / count);
+        proposal = buildVolumeProposal(mesh.triangles, tree);
+        proposalStartTrials = trials; proposalStartAccepted = accepted;
+      }
       if (trials % 8192 === 0) {
         progress(accepted / count);
         if (Date.now() - start > 20000 || trials > Math.max(count * 1000, 1000000)) throw Error('Volume sampling timed out. This model may be very thin, self-intersecting, or mostly empty. Try a simpler solid mesh.');
       }
     }
-    return {points, acceptance: accepted / trials, volume: (max[0] - min[0]) * (max[1] - min[1]) * (max[2] - min[2]) * accepted / trials};
+    const volume = proposal ? proposal.volume * (accepted - proposalStartAccepted) / (trials - proposalStartTrials) : (max[0] - min[0]) * (max[1] - min[1]) * (max[2] - min[2]) * accepted / trials;
+    return {points, acceptance: accepted / trials, volume, accelerated: !!proposal};
   }
 
   function sampleShape(shape, count, seed = 42) {
@@ -310,7 +353,7 @@
     let rg2 = 0; for (let i = 0; i < points.length; i++) rg2 += (points[i] - mean[i % 3]) ** 2 / count;
     return {mean, rg: Math.sqrt(rg2)};
   }
-  const api = {MAX_FACES, random, parseSTL, parseOBJ, prepareMesh, checkClosed, buildBVH, pointInside, sampleMesh, sampleShape, rotationMatrix, rotatePoints, fft2D, ScatteringEngine, directIntensity, pointStats};
+  const api = {MAX_FACES, random, parseSTL, parseOBJ, prepareMesh, checkClosed, buildBVH, pointInside, buildVolumeProposal, sampleMesh, sampleShape, rotationMatrix, rotatePoints, fft2D, ScatteringEngine, directIntensity, pointStats};
   root.SAS = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : self);

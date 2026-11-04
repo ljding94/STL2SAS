@@ -67,6 +67,21 @@ test('Nested closed shells preserve an empty cavity with odd-even filling', () =
   near(sample.volume, 1 - .5 ** 3, .015);
   for (let i = 0; i < sample.points.length; i += 3) assert.ok(Math.max(Math.abs(sample.points[i]),Math.abs(sample.points[i+1]),Math.abs(sample.points[i+2])) >= .25);
 });
+test('Spatial proposal sampling preserves thin-shell cavities, uniform moments, and volume', () => {
+  const outer = SAS.prepareMesh(f.binarySTL(), 'cube.stl'), innerSpan = .98;
+  const triangles = new Float32Array(outer.triangles.length * 2);
+  triangles.set(outer.triangles); triangles.set(outer.triangles.map(x => x * innerSpan), outer.triangles.length);
+  const sample = SAS.sampleMesh({triangles}, 20000, 42), stats = SAS.pointStats(sample.points);
+  assert.ok(sample.accelerated); assert.ok(sample.acceptance > .2);
+  near(sample.volume, 1 - innerSpan ** 3, .003);
+  const expectedSecondMoment = (1 - innerSpan ** 5) / (12 * (1 - innerSpan ** 3));
+  for (let a = 0; a < 3; a++) {
+    near(stats.mean[a], 0, .008);
+    let moment = 0; for (let i = a; i < sample.points.length; i += 3) moment += sample.points[i] ** 2 / 20000;
+    near(moment, expectedSecondMoment, .004);
+  }
+  for (let i = 0; i < sample.points.length; i += 3) assert.ok(Math.max(Math.abs(sample.points[i]), Math.abs(sample.points[i+1]), Math.abs(sample.points[i+2])) >= innerSpan/2 - 1e-7);
+});
 test('A real curved STL imports, samples its volume, and reproduces ellipsoid moments', () => {
   const bytes = fs.readFileSync(path.join(__dirname, '../examples/ellipsoid.stl'));
   const mesh = SAS.prepareMesh(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), 'ellipsoid.stl');

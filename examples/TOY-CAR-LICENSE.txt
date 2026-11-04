@@ -1,0 +1,29 @@
+Toy Car — CC0 1.0 Universal
+
+Source: KhronosGroup/glTF-Sample-Assets, Models/ToyCar
+Pinned source commit: 8f492390ddc7a2ae221a1369ef560589cf8c70fb
+https://github.com/KhronosGroup/glTF-Sample-Assets/tree/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/ToyCar
+
+Upstream legal notice:
+© 2020, Public. Creative Commons Zero v1.0 Universal
+Guido Odendahl for Initial car model
+© 2020, Public. Creative Commons Zero v1.0 Universal
+Eric Chadwick for Extensions and scene composition
+
+CC0 dedication and legal text:
+https://creativecommons.org/publicdomain/zero/1.0/
+https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+This project's toy-car.stl is a modified geometry-only derivative of ToyCar.glb.
+Changes: removed the decorative fabric display base; combined body and glass;
+gave zero-thickness display panels finite walls using a 1.5-model-unit inward
+solidify modifier; voxel-remeshed at 0.65 / 160 of the chosen longest span;
+decimated to approximately 28,000 triangles; placed the longest axis along X
+and height along Z; normalized the final longest span to 160 model units.
+Materials and textures are omitted. The converted STL approximates the source
+geometry for uniform-volume scattering; cavities retained by the remesher remain
+empty during the app's odd-even volume sampling.
+The conversion is reproducible using scripts/prepare-toy-car.py with Blender.
+
+The derived example is also provided under CC0 1.0 Universal. No license for
+the application's other code is implied by this example's public-domain status.
