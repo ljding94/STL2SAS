@@ -5,7 +5,7 @@
   const names = {ellipsoid: 'Triaxial ellipsoid', sphere: 'Sphere', cube: 'Cube', cylinder: 'Cylinder'};
   const planeNames = ['XY', 'XZ', 'YZ'], plotColors = ['#197d62', '#7186cf', '#d59a4c'];
   const sourceURL = URL.createObjectURL(new Blob([$('worker-source').textContent], {type: 'text/javascript'}));
-  const state = {shape: 'ellipsoid', file: null, points: null, display: null, angles: [20, -25, 15], zoom: 1, result: null, isotropic: null, pending: null, busy: false, requestId: 0, seed: 42, sampling: false, auto: true, sampleVersion: 0};
+  const state = {shape: null, file: null, points: null, display: null, angles: [20, -25, 15], zoom: 1, result: null, isotropic: null, pending: null, busy: false, requestId: 0, seed: 42, sampling: false, auto: true, sampleVersion: 0};
   let sampleWorker = null, calcWorker = null, isotropicWorker = null, isotropicId = 0, modelData = null, modelDirty = true;
   const fmt = n => new Intl.NumberFormat('en-US').format(n);
   const number = (n, digits = 3) => Math.abs(n) >= 10000 || (Math.abs(n) > 0 && Math.abs(n) < .001) ? n.toExponential(2) : Number(n.toPrecision(digits)).toString();
@@ -338,8 +338,8 @@
     const sample = examples[key], bytes = Uint8Array.from(atob(sample.base64), c => c.charCodeAt(0));
     return new File([bytes], sample.filename, {type: sample.filename.toLowerCase().endsWith('.stl') ? 'model/stl' : 'text/plain'});
   }
-  $('example').addEventListener('change', event => {
-    const key = event.target.value;
+  function selectExample(key) {
+    $('example').value = key;
     if (examples[key]) {
       const entry = examples[key];
       if (entry.recommendedPoints) $('point-count').value = String(entry.recommendedPoints);
@@ -347,7 +347,8 @@
       acceptFile(exampleFile(key), key); return;
     }
     state.shape = key; state.file = null; $('download-example').disabled = true; $('unit').value = 'nm'; loadModel(true);
-  });
+  }
+  $('example').addEventListener('change', event => selectExample(event.target.value));
   $('download-example').addEventListener('click', () => { if (state.file) download(state.file, state.file.name, state.file.type); });
   $('point-count').addEventListener('change', () => { $('point-label').textContent = fmt(Number($('point-count').value)); loadModel(); });
   $('resample').addEventListener('click', () => { state.seed++; loadModel(); });
@@ -418,5 +419,5 @@
     download(rows.join('\n') + '\n', 'stl2sas-planes.csv', 'text/csv;charset=utf-8');
   });
   window.addEventListener('beforeunload', () => { removeFileDrop(); if (sampleWorker) sampleWorker.terminate(); if (calcWorker) calcWorker.terminate(); if (isotropicWorker) isotropicWorker.terminate(); URL.revokeObjectURL(sourceURL); });
-  updateLabels(); loadModel();
+  updateLabels(); selectExample('stl-torus');
 })();

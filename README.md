@@ -10,7 +10,7 @@ For your existing repository, follow the hosting guide to connect it directly. T
 
 ## Using the app
 
-1. Open `index.html`. The triaxial ellipsoid example starts rotating automatically, with all three scattering planes updating live.
+1. Open `index.html`. The torus STL example starts rotating automatically, with all three scattering planes updating live. Its embedded model loads offline without downloading anything.
 2. Drag a binary/ASCII `.stl` or `.obj` file directly onto the highlighted upload area, or click it to browse. The example selector includes all seven bundled mesh files: a detailed **Toy car · STL**, torus, angle block, ellipsoid, cube in STL and OBJ, and concave L-prism. Four analytic solids are also available. Select a mesh and use **Download selected model file** to save it. All examples are embedded for offline use.
 3. Choose the number of volume points. Imported models must be closed solids. The app checks open and non-manifold edges before uniformly filling the enclosed volume; it never substitutes surface points.
 4. Set the longest span and length unit. STL does **not** encode units. On import, the native largest bounding-box side is preserved and labeled “model unit” until you assign a physical unit. The longest span is not the maximum pair distance, Dmax.
