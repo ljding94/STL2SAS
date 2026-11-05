@@ -2,7 +2,7 @@
 
 A minimal, offline 3D-model-to-small-angle-scattering workbench. Open **`index.html`** in a modern browser and drop an STL or OBJ file onto the page. No installation, network connection, or server is needed. All calculations stay on your device.
 
-[GitHub repository](https://github.com/ljding94/STL2SAS) · [Cloudflare hosting guide](docs/CLOUDFLARE.md) · [Example files and attribution](examples/README.md)
+[Open STL2SAS](https://stl2sas.ljding.app/) · [All apps at ljding.app](https://ljding.app/) · [GitHub repository](https://github.com/ljding94/STL2SAS) · [Cloudflare hosting guide](docs/CLOUDFLARE.md) · [Example files and attribution](examples/README.md)
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fljding94%2FSTL2SAS)
 
