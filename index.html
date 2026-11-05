@@ -44,6 +44,9 @@ main{margin:0 auto}
 .inverse-results{min-width:0;display:flex;flex-direction:column}
 .inverse-plot-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px;padding:2px 0 8px}
 .inverse-plot-heading>span{font-size:10px;color:#6f7a76;display:flex;align-items:center;gap:6px}
+.inverse-axis-label{display:flex;align-items:center;gap:6px;margin-left:auto;font-size:10px;color:#65766b}.inverse-axis-label select{width:auto;height:29px;font-size:10px;padding:0 4px}
+.inverse-plot-heading{flex-wrap:wrap}
+@media(max-width:440px){.inverse-plot-heading>span{width:100%;justify-content:flex-end}}
 .inverse-data-dot{width:5px;height:5px;border-radius:50%;background:#6c7b89}.inverse-fit-line{width:18px;height:2px;background:var(--green);margin-left:9px}
 #inverse-plot{display:block;width:100%;height:280px}
 .inverse-fit-stats{font-size:10px;color:#6f7e70;line-height:1.7;min-height:3.4em;margin:8px 0 14px}
@@ -127,9 +130,9 @@ main{margin:0 auto}
         <fieldset id="inverse-settings">
           <legend class="sr-only">Reconstruction settings</legend>
           <div class="two-fields"><div><label class="field-label" for="inverse-diameter">Search diameter</label><input id="inverse-diameter" type="number" value="94" min="0.000001" max="1000000000" step="any"></div><div><label class="field-label" for="inverse-unit">Length unit</label><select id="inverse-unit"><option value="Å" selected>Å</option><option value="nm">nm</option><option value="µm">µm</option><option value="mm">mm</option><option value="unit">model unit</option></select></div></div>
-          <p class="hint">Bounding sphere diameter, in the inverse of your q unit. The suggested size is only a rough Guinier estimate.</p>
-          <div class="two-fields"><div><label class="field-label" for="inverse-qmax">Maximum q to fit</label><input id="inverse-qmax" type="number" value="0.14" min="0.000000001" step="any"></div><div><label class="field-label" for="inverse-size">Grid resolution</label><select id="inverse-size"><option value="9">9³ · quick</option><option value="11" selected>11³ · standard</option><option value="15">15³ · fine</option><option value="21">21³ · very fine</option><option value="31">31³ · finest, slower</option></select></div></div>
-          <p id="inverse-resolution" class="hint">The coarse model requires q max × diameter ≤ 30.</p>
+          <p class="hint">Diameter of the region for voxel centers, in the inverse of your q unit. Boundary cubes can extend beyond the sphere by up to half a voxel diagonal. The suggested size is a rough Guinier estimate.</p>
+          <div class="two-fields"><div><label class="field-label" for="inverse-qmax">Maximum q to fit</label><input id="inverse-qmax" type="number" value="0.14" min="0.000000001" step="any"></div><div><label class="field-label" for="inverse-size">Grid resolution</label><select id="inverse-size"><option value="9">9³ · quick</option><option value="11">11³ · standard</option><option value="15">15³ · fine</option><option value="21" selected>21³ · very fine</option><option value="31">31³ · finest, slower</option></select></div></div>
+          <p id="inverse-resolution" class="hint">Angular accuracy adapts to q range and search extent.</p>
           <div class="two-fields"><div><label class="field-label" for="inverse-iterations">Steps per search</label><select id="inverse-iterations"><option value="1000">1,000 · preview</option><option value="5000" selected>5,000 · standard</option><option value="15000">15,000 · longer</option><option value="50000">50,000 · fine grids</option><option value="100000">100,000 · extended</option></select></div><div><label class="field-label" for="inverse-attempts">Independent searches</label><select id="inverse-attempts"><option value="3" selected>3 · compare shapes</option><option value="1">1 · quick check</option></select></div></div>
           <div class="two-fields"><div><label class="field-label" for="inverse-regularization">Compactness prior</label><select id="inverse-regularization"><option value="0">Off · 0</option><option value="0.3" selected>Mild · 0.3</option><option value="1">Strong · 1</option></select></div><div><label class="field-label" for="inverse-seed">Random seed</label><input id="inverse-seed" type="number" min="1" max="2147483647" step="1" value="42"></div></div>
           <label class="analytic-toggle inverse-background"><input id="inverse-background" type="checkbox"> Fit a nonnegative constant background</label>
@@ -139,7 +142,7 @@ main{margin:0 auto}
         <p id="inverse-status" class="inverse-status" role="status" aria-live="polite" data-state="empty">Ready when you are.</p>
       </div>
       <div class="inverse-results">
-        <div class="inverse-plot-heading"><strong>Data & fit</strong><span><i class="inverse-data-dot"></i>Data <i class="inverse-fit-line"></i>Candidate</span></div>
+        <div class="inverse-plot-heading"><strong>Data & fit</strong><label class="inverse-axis-label" for="inverse-q-axis">q axis <select id="inverse-q-axis"><option value="linear">Linear</option><option value="log">Logarithmic</option></select></label><span><i class="inverse-data-dot"></i>Data <i class="inverse-fit-line"></i>Candidate</span></div>
         <canvas id="inverse-plot" aria-label="Scattering data, fitted intensity, and weighted residuals versus q"></canvas>
         <p id="inverse-fit-stats" class="inverse-fit-stats">The fit and weighted residuals will appear here.</p>
         <div class="inverse-candidate-row"><label for="inverse-candidate">Candidate</label><select id="inverse-candidate" disabled><option>Run a reconstruction first</option></select></div>
@@ -147,7 +150,7 @@ main{margin:0 auto}
         <div class="inverse-downloads"><button id="inverse-stl" class="primary-button" disabled>↓ Download STL</button><button id="inverse-explore" class="secondary-button" disabled>Explore in forward mode ↑</button><button id="inverse-fit" class="secondary-button" disabled>Fit CSV</button><button id="inverse-report" class="secondary-button" disabled>Run report</button></div>
       </div>
     </div>
-    <details class="inverse-method"><summary>What this reconstruction assumes</summary><p>This is an independent simulated-annealing prototype, inspired by bead-model methods such as <a href="https://www.embl-hamburg.de/biosaxs/dammin.html" target="_blank" rel="noopener noreferrer">DAMMIN</a>. It searches connected, constant-contrast voxels inside a fixed sphere. Local occupancy changes update cached amplitudes; the objective combines weighted intensity residuals and a surface-area compactness prior. Scale is fitted analytically; optional background is constrained nonnegative.</p><p>Up to 64 q values and 256 angular directions guide the search. Each final candidate is evaluated against every retained data point with 2,048 directions and an oversampled projection FFT. The finite cube form factor is included. STL exports are the exact block-shaped envelopes used in the fit, without smoothing. They have no embedded length unit; keep the run report.</p><p>Two-column input uses assumed σ = max(5% |I|, 0.2% of the low-q reference); it does not acquire experimental error bars. The reported weighted RMS is not reduced χ² or evidence for a unique structure. This MVP assumes a dilute, monodisperse particle with uniform contrast, no structure factor or instrument smearing. Grid size, q range, size constraint, incomplete search and angular integration can all affect the result. Cavities and handles may occur; only material connectivity is enforced globally.</p></details>
+    <details class="inverse-method"><summary>What this reconstruction assumes</summary><p>This is an independent hybrid reconstruction prototype, inspired by bead-model methods such as <a href="https://www.embl-hamburg.de/biosaxs/dammin.html" target="_blank" rel="noopener noreferrer">DAMMIN</a>. A global sphere/ellipsoid fit initializes the dimensions, followed by simulated annealing of connected, constant-contrast voxels. Cube centers lie inside the selected sphere; boundary cubes may extend outside it. Local occupancy changes update cached amplitudes; the objective combines weighted intensity residuals and a surface-area compactness prior. Scale is fitted analytically; optional background is constrained nonnegative.</p><p>Up to 256 q values guide the search. Angular accuracy adapts to the requested q range and search extent: 512–8,192 search directions and 2,048–8,192 final-check directions. Each final candidate is evaluated against every retained data point using an oversampled projection FFT. The supported q max × diameter extent is now 120; larger values need additional numerical support. A stabilized sub-unit weighted residual may stop a search early, and actual step counts are exported. The finite cube form factor is included. STL exports are the exact block-shaped envelopes used in the fit, without smoothing. They have no embedded length unit; keep the run report.</p><p>Two-column input uses assumed σ = max(5% |I|, 0.2% of the low-q reference); it does not acquire experimental error bars. The reported weighted RMS is not reduced χ² or evidence for a unique structure. This MVP assumes a dilute, monodisperse particle with uniform contrast, no structure factor or instrument smearing. Grid size, q range, size constraint, incomplete search and angular integration can all affect the result. Cavities and handles may occur; only material connectivity is enforced globally.</p></details>
   </section>
   <div class="metrics"><div><span>SCATTERING POINTS</span><strong id="metric-points">—</strong><small>uniform volume sampling</small></div><div><span>LAST CALCULATION</span><strong id="metric-time">—</strong><small id="metric-grid">three 128 × 128 planes</small></div><div><span>RADIUS OF GYRATION</span><strong id="metric-rg">—</strong><small>estimated from sampled points</small></div><div><span>SAMPLING FLOOR</span><strong id="metric-floor">—</strong><small>finite-point noise ≈ 1 / N</small></div></div>
   <footer><span>STL2SAS <b> / </b> Single-particle form factor · uniform contrast</span><button id="method-footer" class="text-button">Method & limitations ↗</button></footer>
@@ -708,8 +711,9 @@ main{margin:0 auto}
   function makeLattice(size, diameter) {
     if (!GRID_SIZES.includes(size) || !(diameter > 0) || !Number.isFinite(diameter)) throw Error('Invalid search resolution or diameter.');
     const sites = [], lookup = new Int32Array(size**3).fill(-1), half = (size - 1)/2;
-    // Every cube, including its corners, stays within the search sphere.
-    const radius = size/2 - Math.sqrt(3)/2;
+    // The support constrains cube centers. Requiring every cube corner inside
+    // the sphere eroded the requested diameter and excluded valid envelopes.
+    const radius = size/2;
     for (let z=0; z<size; z++) for (let y=0; y<size; y++) for (let x=0; x<size; x++) {
       const p=[x-half,y-half,z-half];
       if (Math.hypot(...p) > radius) continue;
@@ -765,11 +769,12 @@ main{margin:0 auto}
     return visited===count;
   }
 
-  function initialShape(lattice, rg, attempt) {
-    const radius = Math.min(.39, rg ? Math.sqrt(5/3)*rg/lattice.diameter : .32);
+  function initialShape(lattice, rg, attempt, fittedAxes = null) {
+    const radius = Math.min(.495, rg ? Math.sqrt(5/3)*rg/lattice.diameter : .32);
     let axes=[radius,radius,radius];
-    if(attempt%3===1) {const a=Math.min(.4,radius*1.35), b=Math.sqrt(Math.max(.02,3*radius*radius-a*a)/2);axes=[a,b,b];}
+    if(attempt%3===1) {const a=Math.min(.495,radius*1.35), b=Math.sqrt(Math.max(.02,3*radius*radius-a*a)/2);axes=[a,b,b];}
     if(attempt%3===2) {const c=radius*.65,a=Math.sqrt((3*radius*radius-c*c)/2);axes=[a,a,c];}
+    if(fittedAxes)axes=fittedAxes.map(a=>a/lattice.diameter);
     let occupied=Uint8Array.from(lattice.sites,s=>Number(s.p.reduce((sum,v,i)=>sum+(v/axes[i])**2,0)<=1));
     if(occupied.reduce((a,b)=>a+b,0)<12) occupied=Uint8Array.from(lattice.sites,s=>Number(Math.hypot(...s.p)<.29));
     // The export must remain a closed cubical complex throughout the search.
@@ -779,14 +784,75 @@ main{margin:0 auto}
     return occupied;
   }
 
-  function optimizationRule() {
-    const {nodes,weights}=SAS.gaussLegendre(16), directions=[];
-    let sum=0;for(let p=8;p<16;p++)sum+=weights[p];
-    for(let p=8;p<16;p++)for(let a=0;a<32;a++) {
-      const phi=2*Math.PI*a/32,r=Math.sqrt(1-nodes[p]**2);
-      directions.push([r*Math.cos(phi),r*Math.sin(phi),nodes[p],weights[p]/(32*sum)]);
+  function optimizationRule(order = 16, azimuths = 4*order) {
+    const {nodes,weights}=SAS.gaussLegendre(order), directions=[];
+    let sum=0;for(let p=order/2;p<order;p++)sum+=weights[p];
+    for(let p=order/2;p<order;p++)for(let a=0;a<azimuths;a++) {
+      const phi=2*Math.PI*a/azimuths,r=Math.sqrt(1-nodes[p]**2);
+      directions.push([r*Math.cos(phi),r*Math.sin(phi),nodes[p],weights[p]/(azimuths*sum)]);
     }
     return directions;
+  }
+
+  function accuracyPlan(qD, size = 21, dataCount = 256) {
+    if(!Number.isFinite(qD)||qD<=0||qD>120)throw Error('The current browser solver supports q max × search diameter up to 120. Reduce the q range or search extent.');
+    const order=qD<=32?16:qD<=64?32:64,directions=2*order*order;
+    const maxSamples=Math.min(256,Math.floor(256*1024**2/(8*directions*(3*size+1))));
+    return {order,directions,samples:Math.min(dataCount,maxSamples),quality:order===16?'balanced':'fine',verificationDirections:order===16?2048:8192,
+      voxelPhase:qD/size};
+  }
+
+  const sphereAmplitude = x => Math.abs(x)<1e-3 ? 1-x*x/10+x**4/280 : 3*(Math.sin(x)-x*Math.cos(x))/x**3;
+
+  function ellipsoidPrefits(profile, diameter, size, attempts, progress=()=>{}) {
+    // Fit a few global dimensions before making local voxel moves. These are
+    // initial envelopes only; every delivered curve is recalculated from STL voxels.
+    const data=subset(profile,profile.q.at(-1),256),directions=optimizationRule(8,32),lower=diameter/size*.6,upper=diameter/2;
+    function evaluate(axes) {
+      const curve=new Float64Array(data.q.length),sphere=Math.max(...axes)-Math.min(...axes)<1e-8;
+      if(sphere)for(let i=0;i<curve.length;i++)curve[i]=sphereAmplitude(data.q[i]*axes[0])**2;
+      else for(const u of directions) {
+        const radius=Math.hypot(axes[0]*u[0],axes[1]*u[1],axes[2]*u[2]);
+        for(let i=0;i<curve.length;i++)curve[i]+=u[3]*sphereAmplitude(data.q[i]*radius)**2;
+      }
+      return {...fitScale(data,curve,profile.fitBackground),axes};
+    }
+    const scan=Array.from({length:48},(_,i)=>{
+      const r=lower*(upper/lower)**(i/47);return evaluate([r,r,r]);
+    });
+    let bestIndex=0;for(let i=1;i<scan.length;i++)if(scan[i].score<scan[bestIndex].score)bestIndex=i;
+    let lo=scan[Math.max(0,bestIndex-1)].axes[0],hi=scan[Math.min(47,bestIndex+1)].axes[0],sphere=scan[bestIndex];
+    for(let step=0;step<32;step++) {
+      const a=lo+(hi-lo)*.381966,b=lo+(hi-lo)*.618034,fa=evaluate([a,a,a]),fb=evaluate([b,b,b]);
+      if(fa.score<sphere.score)sphere=fa;if(fb.score<sphere.score)sphere=fb;
+      if(fa.score<fb.score)hi=b;else lo=a;
+    }
+    const clamp=x=>Math.max(Math.log(lower),Math.min(Math.log(upper),x));
+    const vertex=x=>({x:x.map(clamp),...evaluate(x.map(v=>Math.exp(clamp(v))))});
+    const results=[];
+    for(let attempt=0;attempt<attempts;attempt++) {
+      const r=sphere.axes[0],axes=attempt===1?[r*1.25,r/Math.sqrt(1.25),r/Math.sqrt(1.25)]:attempt===2?[r*1.15,r*1.15,r/1.15**2]:[r,r,r];
+      const start=axes.map(a=>clamp(Math.log(a))),simplex=[vertex(start)];
+      for(let a=0;a<3;a++){const x=[...start];x[a]+=x[a]>.5*(Math.log(lower)+Math.log(upper))?-.12:.12;simplex.push(vertex(x));}
+      for(let step=0;step<120;step++) {
+        simplex.sort((a,b)=>a.score-b.score);
+        const center=[0,1,2].map(a=>(simplex[0].x[a]+simplex[1].x[a]+simplex[2].x[a])/3),worst=simplex[3];
+        const reflected=vertex(center.map((x,a)=>2*x-worst.x[a]));
+        if(reflected.score<simplex[0].score) {
+          const expanded=vertex(center.map((x,a)=>x+2*(reflected.x[a]-x)));simplex[3]=expanded.score<reflected.score?expanded:reflected;
+        } else if(reflected.score<simplex[2].score)simplex[3]=reflected;
+        else {
+          const outside=reflected.score<worst.score,contracted=vertex(center.map((x,a)=>x+.5*((outside?reflected:worst).x[a]-x)));
+          if(contracted.score<(outside?reflected.score:worst.score))simplex[3]=contracted;
+          else for(let i=1;i<4;i++)simplex[i]=vertex(simplex[0].x.map((x,a)=>x+.5*(simplex[i].x[a]-x)));
+        }
+        if(step%30===0)progress((attempt+step/120)/attempts);
+      }
+      simplex.sort((a,b)=>a.score-b.score);
+      const best=simplex[0].score<sphere.score?simplex[0]:sphere;
+      results.push({axes:best.axes,wrms:best.wrms,method:'bounded Nelder-Mead ellipsoid initialization'});
+    }
+    progress(1);return results;
   }
 
   function subset(profile, qmax, limit=64) {
@@ -826,7 +892,7 @@ main{margin:0 auto}
 
   function amplitudeCache(lattice, q, directions, progress = () => {}) {
     const width=q.length*directions.length, stride=width*2;
-    if(lattice.size<=11) {
+    if(lattice.size<=11 && lattice.sites.length*stride*4<=64*1024**2) {
       const values=new Float32Array(lattice.sites.length*stride);
       for(let i=0;i<lattice.sites.length;i++) {
         const p=lattice.sites[i].p;
@@ -863,21 +929,22 @@ main{margin:0 auto}
 
   function reconstruct(profile, settings={}, progress=()=>{}) {
     const start=performance.now();
-    const diameter=Number(settings.diameter),size=Number(settings.size||11),iterations=Number(settings.iterations||5000),attempts=Number(settings.attempts||3),seed=Number(settings.seed||42),regularization=Number(settings.regularization??.3),background=!!settings.background;
+    const diameter=Number(settings.diameter),size=Number(settings.size||21),iterations=Number(settings.iterations||5000),attempts=Number(settings.attempts||3),seed=Number(settings.seed||42),regularization=Number(settings.regularization??.3),background=!!settings.background;
     const qmax=Math.min(Number(settings.qmax||profile.q.at(-1)),profile.q.at(-1));
-    if(!Number.isFinite(qmax)||qmax<=0||qmax*diameter>30.00001)throw Error('This reconstruction requires q max × search diameter ≤ 30. Lower q max or the search diameter.');
     if(!Number.isInteger(iterations)||iterations<500||iterations>100000||![1,3].includes(attempts)||!Number.isFinite(seed)||!Number.isFinite(regularization)||regularization<0||regularization>5)throw Error('Invalid reconstruction settings.');
-    const used=subset(profile,qmax,5000),sample=subset(used,qmax),lattice=makeLattice(size,diameter),directions=optimizationRule();
+    const lattice=makeLattice(size,diameter),used=subset(profile,qmax,5000),plan=accuracyPlan(qmax*diameter,size,used.q.length),sample=subset(used,qmax,plan.samples),directions=optimizationRule(plan.order);
+    progress({stage:'Fitting global envelope dimensions',fraction:0});
+    const prefits=ellipsoidPrefits({...used,fitBackground:background},diameter,size,attempts,fraction=>progress({stage:'Fitting global envelope dimensions',fraction:.08*fraction}));
     const nq=sample.q.length,nd=directions.length,width=nq*nd,factors=new Float64Array(width);
     for(let q=0;q<nq;q++)for(let d=0;d<nd;d++) {
       const dir=directions[d],v=sample.q[q]*diameter/(2*size);
       factors[q*nd+d]=dir[3]*(sinc(v*dir[0])*sinc(v*dir[1])*sinc(v*dir[2]))**2;
     }
     progress({stage:'Preparing angular amplitudes',fraction:0});
-    const cache=amplitudeCache(lattice,sample.q,directions,fraction=>progress({stage:'Preparing angular amplitudes',fraction:.1*fraction}));
+    const cache=amplitudeCache(lattice,sample.q,directions,fraction=>progress({stage:'Preparing angular amplitudes',fraction:.08+.08*fraction}));
     const candidates=[];
     for(let attempt=0;attempt<attempts;attempt++) {
-      const random=SAS.random(seed+attempt*7919),occupied=initialShape(lattice,profile.rg,attempt),amplitude=new Float64Array(width*2);
+      const random=SAS.random(seed+attempt*7919),occupied=initialShape(lattice,profile.rg,attempt,prefits[attempt].axes),amplitude=new Float64Array(width*2);
       let count=occupied.reduce((a,b)=>a+b,0),surface=0;
       for(let i=0;i<occupied.length;i++)if(occupied[i]) {
         const values=cache.get(i);
@@ -899,11 +966,13 @@ main{margin:0 auto}
       }
       const compactness=(area,n)=>area/(6*n**(2/3));
       let current=evaluate(),energy=current.score+regularization*compactness(surface,count),best={occupied:occupied.slice(),...current,energy,count,surface};
+      let executedSteps=0,checkpoint=Infinity;
       for(let step=0;step<iterations;step++) {
+        executedSteps=step+1;
         let site=-1,neighbors=0;
         for(let trial=0;trial<30;trial++) {
           const candidate=Math.floor(random()*occupied.length),near=lattice.neighbors[candidate].reduce((sum,j)=>sum+(j>=0?occupied[j]:0),0);
-          if((occupied[candidate]&&near<6&&count>12)||(!occupied[candidate]&&near>0&&count<occupied.length*.9)){site=candidate;neighbors=near;break;}
+          if((occupied[candidate]&&near<6&&count>12)||(!occupied[candidate]&&near>0)){site=candidate;neighbors=near;break;}
         }
         if(site>=0) {
           const sign=occupied[site]?-1:1,nextCount=count+sign,nextSurface=surface+sign*(6-2*neighbors);
@@ -920,19 +989,25 @@ main{margin:0 auto}
             }
           }
         }
-        if(step%100===0||step===iterations-1)progress({stage:`Searching candidate ${attempt+1}/${attempts}`,fraction:.1+.8*(attempt+step/iterations)/attempts,attempt:attempt+1,step:step+1,iterations,wrms:best.wrms,q:sample.q,curve:Float64Array.from(best.curve,v=>v*best.scale+best.background)});
+        if(step%100===0||step===iterations-1)progress({stage:`Searching candidate ${attempt+1}/${attempts}`,fraction:.16+.74*(attempt+step/iterations)/attempts,attempt:attempt+1,step:step+1,iterations,wrms:best.wrms,q:sample.q,curve:Float64Array.from(best.curve,v=>v*best.scale+best.background)});
+        // Stop spending moves once a sub-unit weighted residual has stabilized.
+        // The independent all-data evaluation below still decides the reported fit.
+        if(executedSteps%500===0) {
+          if(executedSteps>=1000&&best.wrms<1&&checkpoint-best.energy<.005)break;
+          checkpoint=best.energy;
+        }
       }
       const mesh=voxelSTL(lattice,best.occupied);
       // Independent dense angular/FFT evaluation includes each voxel's exact
       // uniform-cube amplitude, so it describes the exported cubical geometry.
-      progress({stage:`Verifying candidate ${attempt+1}/${attempts}`,fraction:.1+.8*(attempt+1)/attempts});
-      const verified=SAS.isotropicScattering(centers(lattice,best.occupied),Math.max(4,qmax*diameter),'balanced',()=>{},1/size);
+      progress({stage:`Verifying candidate ${attempt+1}/${attempts}`,fraction:.16+.74*(attempt+1)/attempts});
+      const verified=SAS.isotropicScattering(centers(lattice,best.occupied),Math.max(4,qmax*diameter),plan.quality,()=>{},1/size);
       const rawCurve=Float64Array.from(used.q,q=>interpolate(verified.qD,verified.intensity,q*diameter)),fit=fitScale(used,rawCurve,background);
-      candidates.push({attempt:attempt+1,seed:seed+attempt*7919,occupied:best.occupied,points:centers(lattice,best.occupied),mesh,voxelCount:best.count,volume:best.count*(diameter/size)**3,compactness:compactness(best.surface,best.count),...fit,curve:Float64Array.from(rawCurve,v=>v*fit.scale+fit.background),optimizationWRMS:best.wrms});
+      candidates.push({attempt:attempt+1,seed:seed+attempt*7919,occupied:best.occupied,points:centers(lattice,best.occupied),mesh,voxelCount:best.count,volume:best.count*(diameter/size)**3,compactness:compactness(best.surface,best.count),...fit,curve:Float64Array.from(rawCurve,v=>v*fit.scale+fit.background),optimizationWRMS:best.wrms,initialization:prefits[attempt],executedSteps});
     }
     candidates.sort((a,b)=>(a.score+regularization*a.compactness)-(b.score+regularization*b.compactness));
     progress({stage:'Complete',fraction:1});
-    return {candidates,data:used,settings:{diameter,size,iterations,attempts,seed,regularization,background,qmax},optimizedPoints:sample.q.length,optimizationDirections:nd,verificationDirections:2048,amplitudeCache:{mode:cache.mode,bytes:cache.bytes},ms:performance.now()-start};
+    return {candidates,data:used,settings:{diameter,size,iterations,attempts,seed,regularization,background,qmax},optimizedPoints:sample.q.length,optimizationDirections:nd,verificationDirections:plan.verificationDirections,accuracy:plan,amplitudeCache:{mode:cache.mode,bytes:cache.bytes},ms:performance.now()-start};
   }
 
   function sphereExample(settings={}) {
@@ -950,7 +1025,7 @@ main{margin:0 auto}
     return {...prepareProfile(rows,true),generator:{type:'sphere',radius,lengthUnit:'Å',qmin,qmax,count,spacing,noiseSeed:1701,noiseSigmaMultiplier:.4}};
   }
 
-  const api={parseProfile,prepareProfile,fitScale,GRID_SIZES,makeLattice,amplitudeCache,localManifold,isConnected,initialShape,voxelSTL,centers,interpolate,reconstruct,sphereExample};
+  const api={parseProfile,prepareProfile,fitScale,GRID_SIZES,makeLattice,accuracyPlan,ellipsoidPrefits,amplitudeCache,localManifold,isConnected,initialShape,voxelSTL,centers,interpolate,reconstruct,sphereExample};
   root.SASInverse=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:self);
 
@@ -1544,8 +1619,9 @@ self.onmessage = ({data}) => {
   function makeLattice(size, diameter) {
     if (!GRID_SIZES.includes(size) || !(diameter > 0) || !Number.isFinite(diameter)) throw Error('Invalid search resolution or diameter.');
     const sites = [], lookup = new Int32Array(size**3).fill(-1), half = (size - 1)/2;
-    // Every cube, including its corners, stays within the search sphere.
-    const radius = size/2 - Math.sqrt(3)/2;
+    // The support constrains cube centers. Requiring every cube corner inside
+    // the sphere eroded the requested diameter and excluded valid envelopes.
+    const radius = size/2;
     for (let z=0; z<size; z++) for (let y=0; y<size; y++) for (let x=0; x<size; x++) {
       const p=[x-half,y-half,z-half];
       if (Math.hypot(...p) > radius) continue;
@@ -1601,11 +1677,12 @@ self.onmessage = ({data}) => {
     return visited===count;
   }
 
-  function initialShape(lattice, rg, attempt) {
-    const radius = Math.min(.39, rg ? Math.sqrt(5/3)*rg/lattice.diameter : .32);
+  function initialShape(lattice, rg, attempt, fittedAxes = null) {
+    const radius = Math.min(.495, rg ? Math.sqrt(5/3)*rg/lattice.diameter : .32);
     let axes=[radius,radius,radius];
-    if(attempt%3===1) {const a=Math.min(.4,radius*1.35), b=Math.sqrt(Math.max(.02,3*radius*radius-a*a)/2);axes=[a,b,b];}
+    if(attempt%3===1) {const a=Math.min(.495,radius*1.35), b=Math.sqrt(Math.max(.02,3*radius*radius-a*a)/2);axes=[a,b,b];}
     if(attempt%3===2) {const c=radius*.65,a=Math.sqrt((3*radius*radius-c*c)/2);axes=[a,a,c];}
+    if(fittedAxes)axes=fittedAxes.map(a=>a/lattice.diameter);
     let occupied=Uint8Array.from(lattice.sites,s=>Number(s.p.reduce((sum,v,i)=>sum+(v/axes[i])**2,0)<=1));
     if(occupied.reduce((a,b)=>a+b,0)<12) occupied=Uint8Array.from(lattice.sites,s=>Number(Math.hypot(...s.p)<.29));
     // The export must remain a closed cubical complex throughout the search.
@@ -1615,14 +1692,75 @@ self.onmessage = ({data}) => {
     return occupied;
   }
 
-  function optimizationRule() {
-    const {nodes,weights}=SAS.gaussLegendre(16), directions=[];
-    let sum=0;for(let p=8;p<16;p++)sum+=weights[p];
-    for(let p=8;p<16;p++)for(let a=0;a<32;a++) {
-      const phi=2*Math.PI*a/32,r=Math.sqrt(1-nodes[p]**2);
-      directions.push([r*Math.cos(phi),r*Math.sin(phi),nodes[p],weights[p]/(32*sum)]);
+  function optimizationRule(order = 16, azimuths = 4*order) {
+    const {nodes,weights}=SAS.gaussLegendre(order), directions=[];
+    let sum=0;for(let p=order/2;p<order;p++)sum+=weights[p];
+    for(let p=order/2;p<order;p++)for(let a=0;a<azimuths;a++) {
+      const phi=2*Math.PI*a/azimuths,r=Math.sqrt(1-nodes[p]**2);
+      directions.push([r*Math.cos(phi),r*Math.sin(phi),nodes[p],weights[p]/(azimuths*sum)]);
     }
     return directions;
+  }
+
+  function accuracyPlan(qD, size = 21, dataCount = 256) {
+    if(!Number.isFinite(qD)||qD<=0||qD>120)throw Error('The current browser solver supports q max × search diameter up to 120. Reduce the q range or search extent.');
+    const order=qD<=32?16:qD<=64?32:64,directions=2*order*order;
+    const maxSamples=Math.min(256,Math.floor(256*1024**2/(8*directions*(3*size+1))));
+    return {order,directions,samples:Math.min(dataCount,maxSamples),quality:order===16?'balanced':'fine',verificationDirections:order===16?2048:8192,
+      voxelPhase:qD/size};
+  }
+
+  const sphereAmplitude = x => Math.abs(x)<1e-3 ? 1-x*x/10+x**4/280 : 3*(Math.sin(x)-x*Math.cos(x))/x**3;
+
+  function ellipsoidPrefits(profile, diameter, size, attempts, progress=()=>{}) {
+    // Fit a few global dimensions before making local voxel moves. These are
+    // initial envelopes only; every delivered curve is recalculated from STL voxels.
+    const data=subset(profile,profile.q.at(-1),256),directions=optimizationRule(8,32),lower=diameter/size*.6,upper=diameter/2;
+    function evaluate(axes) {
+      const curve=new Float64Array(data.q.length),sphere=Math.max(...axes)-Math.min(...axes)<1e-8;
+      if(sphere)for(let i=0;i<curve.length;i++)curve[i]=sphereAmplitude(data.q[i]*axes[0])**2;
+      else for(const u of directions) {
+        const radius=Math.hypot(axes[0]*u[0],axes[1]*u[1],axes[2]*u[2]);
+        for(let i=0;i<curve.length;i++)curve[i]+=u[3]*sphereAmplitude(data.q[i]*radius)**2;
+      }
+      return {...fitScale(data,curve,profile.fitBackground),axes};
+    }
+    const scan=Array.from({length:48},(_,i)=>{
+      const r=lower*(upper/lower)**(i/47);return evaluate([r,r,r]);
+    });
+    let bestIndex=0;for(let i=1;i<scan.length;i++)if(scan[i].score<scan[bestIndex].score)bestIndex=i;
+    let lo=scan[Math.max(0,bestIndex-1)].axes[0],hi=scan[Math.min(47,bestIndex+1)].axes[0],sphere=scan[bestIndex];
+    for(let step=0;step<32;step++) {
+      const a=lo+(hi-lo)*.381966,b=lo+(hi-lo)*.618034,fa=evaluate([a,a,a]),fb=evaluate([b,b,b]);
+      if(fa.score<sphere.score)sphere=fa;if(fb.score<sphere.score)sphere=fb;
+      if(fa.score<fb.score)hi=b;else lo=a;
+    }
+    const clamp=x=>Math.max(Math.log(lower),Math.min(Math.log(upper),x));
+    const vertex=x=>({x:x.map(clamp),...evaluate(x.map(v=>Math.exp(clamp(v))))});
+    const results=[];
+    for(let attempt=0;attempt<attempts;attempt++) {
+      const r=sphere.axes[0],axes=attempt===1?[r*1.25,r/Math.sqrt(1.25),r/Math.sqrt(1.25)]:attempt===2?[r*1.15,r*1.15,r/1.15**2]:[r,r,r];
+      const start=axes.map(a=>clamp(Math.log(a))),simplex=[vertex(start)];
+      for(let a=0;a<3;a++){const x=[...start];x[a]+=x[a]>.5*(Math.log(lower)+Math.log(upper))?-.12:.12;simplex.push(vertex(x));}
+      for(let step=0;step<120;step++) {
+        simplex.sort((a,b)=>a.score-b.score);
+        const center=[0,1,2].map(a=>(simplex[0].x[a]+simplex[1].x[a]+simplex[2].x[a])/3),worst=simplex[3];
+        const reflected=vertex(center.map((x,a)=>2*x-worst.x[a]));
+        if(reflected.score<simplex[0].score) {
+          const expanded=vertex(center.map((x,a)=>x+2*(reflected.x[a]-x)));simplex[3]=expanded.score<reflected.score?expanded:reflected;
+        } else if(reflected.score<simplex[2].score)simplex[3]=reflected;
+        else {
+          const outside=reflected.score<worst.score,contracted=vertex(center.map((x,a)=>x+.5*((outside?reflected:worst).x[a]-x)));
+          if(contracted.score<(outside?reflected.score:worst.score))simplex[3]=contracted;
+          else for(let i=1;i<4;i++)simplex[i]=vertex(simplex[0].x.map((x,a)=>x+.5*(simplex[i].x[a]-x)));
+        }
+        if(step%30===0)progress((attempt+step/120)/attempts);
+      }
+      simplex.sort((a,b)=>a.score-b.score);
+      const best=simplex[0].score<sphere.score?simplex[0]:sphere;
+      results.push({axes:best.axes,wrms:best.wrms,method:'bounded Nelder-Mead ellipsoid initialization'});
+    }
+    progress(1);return results;
   }
 
   function subset(profile, qmax, limit=64) {
@@ -1662,7 +1800,7 @@ self.onmessage = ({data}) => {
 
   function amplitudeCache(lattice, q, directions, progress = () => {}) {
     const width=q.length*directions.length, stride=width*2;
-    if(lattice.size<=11) {
+    if(lattice.size<=11 && lattice.sites.length*stride*4<=64*1024**2) {
       const values=new Float32Array(lattice.sites.length*stride);
       for(let i=0;i<lattice.sites.length;i++) {
         const p=lattice.sites[i].p;
@@ -1699,21 +1837,22 @@ self.onmessage = ({data}) => {
 
   function reconstruct(profile, settings={}, progress=()=>{}) {
     const start=performance.now();
-    const diameter=Number(settings.diameter),size=Number(settings.size||11),iterations=Number(settings.iterations||5000),attempts=Number(settings.attempts||3),seed=Number(settings.seed||42),regularization=Number(settings.regularization??.3),background=!!settings.background;
+    const diameter=Number(settings.diameter),size=Number(settings.size||21),iterations=Number(settings.iterations||5000),attempts=Number(settings.attempts||3),seed=Number(settings.seed||42),regularization=Number(settings.regularization??.3),background=!!settings.background;
     const qmax=Math.min(Number(settings.qmax||profile.q.at(-1)),profile.q.at(-1));
-    if(!Number.isFinite(qmax)||qmax<=0||qmax*diameter>30.00001)throw Error('This reconstruction requires q max × search diameter ≤ 30. Lower q max or the search diameter.');
     if(!Number.isInteger(iterations)||iterations<500||iterations>100000||![1,3].includes(attempts)||!Number.isFinite(seed)||!Number.isFinite(regularization)||regularization<0||regularization>5)throw Error('Invalid reconstruction settings.');
-    const used=subset(profile,qmax,5000),sample=subset(used,qmax),lattice=makeLattice(size,diameter),directions=optimizationRule();
+    const lattice=makeLattice(size,diameter),used=subset(profile,qmax,5000),plan=accuracyPlan(qmax*diameter,size,used.q.length),sample=subset(used,qmax,plan.samples),directions=optimizationRule(plan.order);
+    progress({stage:'Fitting global envelope dimensions',fraction:0});
+    const prefits=ellipsoidPrefits({...used,fitBackground:background},diameter,size,attempts,fraction=>progress({stage:'Fitting global envelope dimensions',fraction:.08*fraction}));
     const nq=sample.q.length,nd=directions.length,width=nq*nd,factors=new Float64Array(width);
     for(let q=0;q<nq;q++)for(let d=0;d<nd;d++) {
       const dir=directions[d],v=sample.q[q]*diameter/(2*size);
       factors[q*nd+d]=dir[3]*(sinc(v*dir[0])*sinc(v*dir[1])*sinc(v*dir[2]))**2;
     }
     progress({stage:'Preparing angular amplitudes',fraction:0});
-    const cache=amplitudeCache(lattice,sample.q,directions,fraction=>progress({stage:'Preparing angular amplitudes',fraction:.1*fraction}));
+    const cache=amplitudeCache(lattice,sample.q,directions,fraction=>progress({stage:'Preparing angular amplitudes',fraction:.08+.08*fraction}));
     const candidates=[];
     for(let attempt=0;attempt<attempts;attempt++) {
-      const random=SAS.random(seed+attempt*7919),occupied=initialShape(lattice,profile.rg,attempt),amplitude=new Float64Array(width*2);
+      const random=SAS.random(seed+attempt*7919),occupied=initialShape(lattice,profile.rg,attempt,prefits[attempt].axes),amplitude=new Float64Array(width*2);
       let count=occupied.reduce((a,b)=>a+b,0),surface=0;
       for(let i=0;i<occupied.length;i++)if(occupied[i]) {
         const values=cache.get(i);
@@ -1735,11 +1874,13 @@ self.onmessage = ({data}) => {
       }
       const compactness=(area,n)=>area/(6*n**(2/3));
       let current=evaluate(),energy=current.score+regularization*compactness(surface,count),best={occupied:occupied.slice(),...current,energy,count,surface};
+      let executedSteps=0,checkpoint=Infinity;
       for(let step=0;step<iterations;step++) {
+        executedSteps=step+1;
         let site=-1,neighbors=0;
         for(let trial=0;trial<30;trial++) {
           const candidate=Math.floor(random()*occupied.length),near=lattice.neighbors[candidate].reduce((sum,j)=>sum+(j>=0?occupied[j]:0),0);
-          if((occupied[candidate]&&near<6&&count>12)||(!occupied[candidate]&&near>0&&count<occupied.length*.9)){site=candidate;neighbors=near;break;}
+          if((occupied[candidate]&&near<6&&count>12)||(!occupied[candidate]&&near>0)){site=candidate;neighbors=near;break;}
         }
         if(site>=0) {
           const sign=occupied[site]?-1:1,nextCount=count+sign,nextSurface=surface+sign*(6-2*neighbors);
@@ -1756,19 +1897,25 @@ self.onmessage = ({data}) => {
             }
           }
         }
-        if(step%100===0||step===iterations-1)progress({stage:`Searching candidate ${attempt+1}/${attempts}`,fraction:.1+.8*(attempt+step/iterations)/attempts,attempt:attempt+1,step:step+1,iterations,wrms:best.wrms,q:sample.q,curve:Float64Array.from(best.curve,v=>v*best.scale+best.background)});
+        if(step%100===0||step===iterations-1)progress({stage:`Searching candidate ${attempt+1}/${attempts}`,fraction:.16+.74*(attempt+step/iterations)/attempts,attempt:attempt+1,step:step+1,iterations,wrms:best.wrms,q:sample.q,curve:Float64Array.from(best.curve,v=>v*best.scale+best.background)});
+        // Stop spending moves once a sub-unit weighted residual has stabilized.
+        // The independent all-data evaluation below still decides the reported fit.
+        if(executedSteps%500===0) {
+          if(executedSteps>=1000&&best.wrms<1&&checkpoint-best.energy<.005)break;
+          checkpoint=best.energy;
+        }
       }
       const mesh=voxelSTL(lattice,best.occupied);
       // Independent dense angular/FFT evaluation includes each voxel's exact
       // uniform-cube amplitude, so it describes the exported cubical geometry.
-      progress({stage:`Verifying candidate ${attempt+1}/${attempts}`,fraction:.1+.8*(attempt+1)/attempts});
-      const verified=SAS.isotropicScattering(centers(lattice,best.occupied),Math.max(4,qmax*diameter),'balanced',()=>{},1/size);
+      progress({stage:`Verifying candidate ${attempt+1}/${attempts}`,fraction:.16+.74*(attempt+1)/attempts});
+      const verified=SAS.isotropicScattering(centers(lattice,best.occupied),Math.max(4,qmax*diameter),plan.quality,()=>{},1/size);
       const rawCurve=Float64Array.from(used.q,q=>interpolate(verified.qD,verified.intensity,q*diameter)),fit=fitScale(used,rawCurve,background);
-      candidates.push({attempt:attempt+1,seed:seed+attempt*7919,occupied:best.occupied,points:centers(lattice,best.occupied),mesh,voxelCount:best.count,volume:best.count*(diameter/size)**3,compactness:compactness(best.surface,best.count),...fit,curve:Float64Array.from(rawCurve,v=>v*fit.scale+fit.background),optimizationWRMS:best.wrms});
+      candidates.push({attempt:attempt+1,seed:seed+attempt*7919,occupied:best.occupied,points:centers(lattice,best.occupied),mesh,voxelCount:best.count,volume:best.count*(diameter/size)**3,compactness:compactness(best.surface,best.count),...fit,curve:Float64Array.from(rawCurve,v=>v*fit.scale+fit.background),optimizationWRMS:best.wrms,initialization:prefits[attempt],executedSteps});
     }
     candidates.sort((a,b)=>(a.score+regularization*a.compactness)-(b.score+regularization*b.compactness));
     progress({stage:'Complete',fraction:1});
-    return {candidates,data:used,settings:{diameter,size,iterations,attempts,seed,regularization,background,qmax},optimizedPoints:sample.q.length,optimizationDirections:nd,verificationDirections:2048,amplitudeCache:{mode:cache.mode,bytes:cache.bytes},ms:performance.now()-start};
+    return {candidates,data:used,settings:{diameter,size,iterations,attempts,seed,regularization,background,qmax},optimizedPoints:sample.q.length,optimizationDirections:nd,verificationDirections:plan.verificationDirections,accuracy:plan,amplitudeCache:{mode:cache.mode,bytes:cache.bytes},ms:performance.now()-start};
   }
 
   function sphereExample(settings={}) {
@@ -1786,7 +1933,7 @@ self.onmessage = ({data}) => {
     return {...prepareProfile(rows,true),generator:{type:'sphere',radius,lengthUnit:'Å',qmin,qmax,count,spacing,noiseSeed:1701,noiseSigmaMultiplier:.4}};
   }
 
-  const api={parseProfile,prepareProfile,fitScale,GRID_SIZES,makeLattice,amplitudeCache,localManifold,isConnected,initialShape,voxelSTL,centers,interpolate,reconstruct,sphereExample};
+  const api={parseProfile,prepareProfile,fitScale,GRID_SIZES,makeLattice,accuracyPlan,ellipsoidPrefits,amplitudeCache,localManifold,isConnected,initialShape,voxelSTL,centers,interpolate,reconstruct,sphereExample};
   root.SASInverse=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:self);
 </script>
@@ -2316,7 +2463,10 @@ self.onmessage = ({data}) => {
   }
   function resolutionHint() {
     const diameter = Number($('inverse-diameter').value), qmax = Number($('inverse-qmax').value), size = Number($('inverse-size').value);
-    $('inverse-resolution').textContent = `Voxel edge ≈ ${n(diameter/size)} ${unit()}; q max × diameter = ${n(qmax*diameter)} (limit 30).${size >= 15 ? ' Finer grids usually need more search steps; compare longer runs.' : ''}`;
+    try {
+      const plan=SASInverse.accuracyPlan(qmax*diameter,size,state.profile?.q.length||256);
+      $('inverse-resolution').textContent = `Voxel edge ≈ ${n(diameter/size)} ${unit()}; q max × diameter = ${n(qmax*diameter)}. Adaptive search: ${plan.directions.toLocaleString()} directions; final check: ${plan.verificationDirections.toLocaleString()}.${plan.voxelPhase>Math.PI ? ' This q range exceeds the grid’s spatial resolution; use a finer grid or smaller search extent.' : ''}`;
+    } catch(error) { $('inverse-resolution').textContent=error.message; }
   }
   function setProfile(profile, name, lengthUnit = 'Å', provenance = 'Uploaded isotropic intensity') {
     stop(true); state.profile = profile; state.name = name; state.provenance = provenance;
@@ -2324,11 +2474,12 @@ self.onmessage = ({data}) => {
     $('inverse-unit').value = lengthUnit;
     const diameter = profile.suggestedDiameter || 8 / profile.q.at(-1);
     $('inverse-diameter').value = n(diameter, 5);
-    $('inverse-qmax').value = n(Math.min(profile.q.at(-1), 30 / diameter), 8);
+    $('inverse-qmax').value = n(Math.min(profile.q.at(-1), 120 / diameter), 8);
+    $('inverse-q-axis').value = profile.generator?.spacing === 'log' ? 'log' : 'linear';
     $('inverse-data-summary').textContent = `${name} · ${profile.q.length} points · q ${n(profile.q[0])}–${n(profile.q.at(-1))}. ${profile.hasSigma ? 'Supplied uncertainties.' : 'Assumed weights: 5% of I, with a low-q floor.'}${profile.rg ? ` Estimated Rg ≈ ${n(profile.rg)} ${lengthUnit}.` : 'No usable Guinier size estimate; set the search diameter.'} ${provenance}${profile.intensity.some(v => v <= 0) ? ' Nonpositive intensities are fitted but omitted from the log-intensity plot.' : ''}`;
     clearResult(); resolutionHint(); busy(false);
     const clipped = Number($('inverse-qmax').value) < profile.q.at(-1) * (1 - 1e-7);
-    status(clipped ? `Data loaded. The fit is limited to q ≤ ${n(Number($('inverse-qmax').value))} ${lengthUnit}⁻¹ by q max × diameter ≤ 30; the plot and input CSV retain the full generated range.` : 'Data loaded. Check the q unit and search diameter, then reconstruct.');
+    status(clipped ? `Data loaded. This browser implementation supports q max × diameter up to 120, so the fit ends at q = ${n(Number($('inverse-qmax').value))} ${lengthUnit}⁻¹. The plot and input CSV retain the full range.` : 'Data loaded. Check the q unit and search diameter, then reconstruct.');
   }
   async function loadFile(file) {
     if (!file) return;
@@ -2374,6 +2525,10 @@ self.onmessage = ({data}) => {
     clearResult(); resolutionHint();
     if (state.profile) status('Settings changed. Reconstruct to generate new candidates.');
   });
+  $('inverse-q-axis').addEventListener('change', () => {
+    if($('inverse-q-axis').value==='log'&&state.profile?.q[0]===0){$('inverse-q-axis').value='linear';status('A logarithmic q axis needs a positive minimum q. The q = 0 point is retained on a linear axis.');}
+    drawPlot();
+  });
   $('inverse-run').addEventListener('click', () => {
     if (!state.profile || state.worker) return;
     try {
@@ -2383,7 +2538,7 @@ self.onmessage = ({data}) => {
         iterations: Number($('inverse-iterations').value), attempts: Number($('inverse-attempts').value),
         seed: Number($('inverse-seed').value), regularization: Number($('inverse-regularization').value), background: $('inverse-background').checked
       };
-      if (settings.qmax * settings.diameter > 30.00001) throw Error('Lower maximum q or the search diameter: q max × diameter must be ≤ 30.');
+      SASInverse.accuracyPlan(settings.qmax*settings.diameter,settings.size,state.profile.q.length);
       clearResult(); busy(true); status('Preparing the search…', 'running');
       document.dispatchEvent(new CustomEvent('stl2sas:inverse-start'));
       const id = ++state.job, worker = state.worker = new Worker(sourceURL), started = performance.now(), lengthUnit = unit();
@@ -2404,7 +2559,8 @@ self.onmessage = ({data}) => {
         $('inverse-candidate').disabled = false;
         for (const key of ['inverse-stl','inverse-fit','inverse-report','inverse-explore']) $(key).disabled = false;
         selectCandidate();
-        status(`${data.candidates.length} candidate${data.candidates.length > 1 ? 's' : ''} completed in ${((performance.now()-started)/1000).toFixed(1)} s. Compare shapes and residuals; a fit does not identify a unique structure.`, 'complete');
+        const poor=data.candidates[0].wrms>2;
+        status(`${data.candidates.length} candidate${data.candidates.length > 1 ? 's' : ''} completed in ${((performance.now()-started)/1000).toFixed(1)} s.${poor?' Residuals remain large; check the search extent, resolution, assumptions and longer runs.':' Compare shapes and residuals; a fit does not identify a unique structure.'}`, 'complete');
       };
       worker.onerror = () => { if (id === state.job) { stop(true); status('The reconstruction worker stopped. Try a smaller grid or fewer steps.', 'error'); } };
       worker.postMessage({type: 'reconstruct', id, profile: state.profile, settings});
@@ -2415,7 +2571,7 @@ self.onmessage = ({data}) => {
   function selectCandidate() {
     const c = selected(), result = state.result; if (!c) return;
     state.mesh = SAS.prepareMesh(c.mesh, 'reconstructed.stl');
-    $('inverse-fit-stats').textContent = `Weighted RMS ${n(c.wrms)} · ${result.data.q.length} fitted points · q ${n(result.data.q[0])}–${n(result.data.q.at(-1))} ${result.lengthUnit}⁻¹ · scale ${n(c.scale)} · background ${n(c.background)} · final check: 2,048 directions. ${result.data.hasSigma ? 'Uses supplied σ.' : 'Uses assumed weights, not measured σ.'}`;
+    $('inverse-fit-stats').textContent = `Weighted RMS ${n(c.wrms)} · ${result.data.q.length} fitted points · q ${n(result.data.q[0])}–${n(result.data.q.at(-1))} ${result.lengthUnit}⁻¹ · scale ${n(c.scale)} · background ${n(c.background)} · final check: ${result.verificationDirections.toLocaleString()} directions. ${result.data.hasSigma ? 'Uses supplied σ.' : 'Uses assumed weights, not measured σ.'}${Math.abs(c.wrms-c.optimizationWRMS)>.5?' Search and final-check residuals differ; treat this candidate cautiously.':''}`;
     $('inverse-shape-caption').textContent = `${c.voxelCount} connected voxels · volume ${n(c.volume)} ${result.lengthUnit}³ · exact, unsmoothed envelope`;
     state.angles = [-24,30,12]; drawPlot(); drawShape();
   }
@@ -2431,14 +2587,16 @@ self.onmessage = ({data}) => {
     if (!profile) { ctx.textAlign='center'; ctx.fillText('Load a curve to begin',w/2,h/2); return; }
     const c = selected(), fitted = state.result?.data, line = c ? {q:fitted.q,curve:c.curve} : state.live;
     const xmin = profile.q[0], xmax = profile.q.at(-1), left=55,right=w-15,top=16,bottom=h*.66,resTop=h*.79,resBottom=h-27;
+    const logAxis=$('inverse-q-axis').value==='log'&&xmin>0,transform=q=>logAxis?Math.log(q):q;
+    $('inverse-plot').dataset.qAxis=logAxis?'log':'linear';
     const positives = Array.from(profile.intensity).filter(v=>v>0).concat(line ? Array.from(line.curve).filter(v=>v>0) : []);
     const ymax = Math.ceil(Math.log10(Math.max(...positives))), ymin = Math.max(ymax-8,Math.floor(Math.log10(Math.min(...positives))));
-    const x = q => left+(q-xmin)/(xmax-xmin)*(right-left), y = v => bottom-(Math.log10(v)-ymin)/Math.max(1,ymax-ymin)*(bottom-top);
+    const x = q => left+(transform(q)-transform(xmin))/(transform(xmax)-transform(xmin))*(right-left), y = v => bottom-(Math.log10(v)-ymin)/Math.max(1,ymax-ymin)*(bottom-top);
     ctx.textAlign='right'; ctx.strokeStyle='#e8ede7'; ctx.lineWidth=1;
     for(let tick=ymin;tick<=ymax;tick++) { const yy=y(10**tick);ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(right,yy);ctx.stroke();ctx.fillText(`1e${tick}`,left-9,yy+4); }
     ctx.fillStyle='#64766a';ctx.textAlign='left';ctx.fillText('I(q)',left,10);
-    for(let i=0;i<=4;i++) {const q=xmin+(xmax-xmin)*i/4;ctx.textAlign='center';ctx.fillText(n(q,2),x(q),h-11);}
-    ctx.textAlign='right';ctx.fillText(`q (${state.result?.lengthUnit || unit()}⁻¹)`,right,h-1);
+    for(let i=0;i<=4;i++) {const q=logAxis?Math.exp(Math.log(xmin)+(Math.log(xmax)-Math.log(xmin))*i/4):xmin+(xmax-xmin)*i/4;ctx.textAlign='center';ctx.fillText(n(q,2),x(q),h-11);}
+    ctx.textAlign='right';ctx.fillText(`q (${state.result?.lengthUnit || unit()}⁻¹)${logAxis?' · log scale':''}`,right,h-1);
     ctx.save();ctx.beginPath();ctx.rect(left,top,right-left,bottom-top);ctx.clip();
     for(let i=0;i<profile.q.length;i++) {
       const value=profile.intensity[i];if(value<=0)continue;
@@ -2493,7 +2651,14 @@ self.onmessage = ({data}) => {
   });
   $('inverse-report').addEventListener('click',()=>{
     const r=state.result;if(!r)return;
-    const report={format:'STL2SAS inverse 0.1',source:r.source,provenance:r.provenance,lengthUnit:r.lengthUnit,generator:r.data.generator||null,settings:r.settings,selectedCandidate:state.selected+1,elapsedMs:r.ms,optimizedPoints:r.optimizedPoints,optimizationDirections:r.optimizationDirections,verificationDirections:r.verificationDirections,amplitudeCache:r.amplitudeCache,weights:r.data.hasSigma?'supplied sigma':'assumed max(0.05*abs(I),0.002*low-q reference)',data:{q:Array.from(r.data.q),intensity:Array.from(r.data.intensity),sigma:Array.from(r.data.sigma)},candidates:r.candidates.map((c,i)=>({rank:i+1,seed:c.seed,voxelCount:c.voxelCount,volume:c.volume,compactness:c.compactness,scale:c.scale,background:c.background,weightedRMS:c.wrms,optimizationRMS:c.optimizationWRMS,fit:Array.from(c.curve),occupiedSites:Array.from(c.occupied),centersInLengthUnits:Array.from(c.points,x=>x*r.settings.diameter)})),limitations:['Nonunique, prior-dependent coarse envelope; not a validated structural determination.','Weighted RMS is not reduced chi-squared.','No polydispersity, structure factor, varying SLD, or instrument smearing.','Final check uses approximate angular quadrature and projection FFT.','The exported STL has no embedded length unit and is not smoothed.']};
+    const report={format:'STL2SAS inverse 0.2',source:r.source,provenance:r.provenance,lengthUnit:r.lengthUnit,generator:r.data.generator||null,
+      algorithm:'ellipsoid initialization + voxel simulated annealing',settings:r.settings,selectedCandidate:state.selected+1,elapsedMs:r.ms,
+      optimizedPoints:r.optimizedPoints,optimizationDirections:r.optimizationDirections,verificationDirections:r.verificationDirections,accuracy:r.accuracy,amplitudeCache:r.amplitudeCache,
+      weights:r.data.hasSigma?'supplied sigma':'assumed max(0.05*abs(I),0.002*low-q reference)',data:{q:Array.from(r.data.q),intensity:Array.from(r.data.intensity),sigma:Array.from(r.data.sigma)},
+      candidates:r.candidates.map((c,i)=>({rank:i+1,seed:c.seed,voxelCount:c.voxelCount,volume:c.volume,compactness:c.compactness,scale:c.scale,background:c.background,
+        weightedRMS:c.wrms,optimizationRMS:c.optimizationWRMS,initialization:c.initialization,executedSteps:c.executedSteps,
+        fit:Array.from(c.curve),occupiedSites:Array.from(c.occupied),centersInLengthUnits:Array.from(c.points,x=>x*r.settings.diameter)})),
+      limitations:['Nonunique, prior-dependent envelope; not a validated structural determination.','Weighted RMS is not reduced chi-squared.','No polydispersity, structure factor, varying SLD, or instrument smearing.','Final check uses approximate angular quadrature and projection FFT.','The exported STL has no embedded length unit and is not smoothed.']};
     download(JSON.stringify(report,null,2)+'\n','stl2sas-inverse-report.json','application/json');
   });
   window.addEventListener('beforeunload',()=>{stop(true);URL.revokeObjectURL(sourceURL);});

@@ -91,8 +91,9 @@
   function makeLattice(size, diameter) {
     if (!GRID_SIZES.includes(size) || !(diameter > 0) || !Number.isFinite(diameter)) throw Error('Invalid search resolution or diameter.');
     const sites = [], lookup = new Int32Array(size**3).fill(-1), half = (size - 1)/2;
-    // Every cube, including its corners, stays within the search sphere.
-    const radius = size/2 - Math.sqrt(3)/2;
+    // The support constrains cube centers. Requiring every cube corner inside
+    // the sphere eroded the requested diameter and excluded valid envelopes.
+    const radius = size/2;
     for (let z=0; z<size; z++) for (let y=0; y<size; y++) for (let x=0; x<size; x++) {
       const p=[x-half,y-half,z-half];
       if (Math.hypot(...p) > radius) continue;
@@ -148,11 +149,12 @@
     return visited===count;
   }
 
-  function initialShape(lattice, rg, attempt) {
-    const radius = Math.min(.39, rg ? Math.sqrt(5/3)*rg/lattice.diameter : .32);
+  function initialShape(lattice, rg, attempt, fittedAxes = null) {
+    const radius = Math.min(.495, rg ? Math.sqrt(5/3)*rg/lattice.diameter : .32);
     let axes=[radius,radius,radius];
-    if(attempt%3===1) {const a=Math.min(.4,radius*1.35), b=Math.sqrt(Math.max(.02,3*radius*radius-a*a)/2);axes=[a,b,b];}
+    if(attempt%3===1) {const a=Math.min(.495,radius*1.35), b=Math.sqrt(Math.max(.02,3*radius*radius-a*a)/2);axes=[a,b,b];}
     if(attempt%3===2) {const c=radius*.65,a=Math.sqrt((3*radius*radius-c*c)/2);axes=[a,a,c];}
+    if(fittedAxes)axes=fittedAxes.map(a=>a/lattice.diameter);
     let occupied=Uint8Array.from(lattice.sites,s=>Number(s.p.reduce((sum,v,i)=>sum+(v/axes[i])**2,0)<=1));
     if(occupied.reduce((a,b)=>a+b,0)<12) occupied=Uint8Array.from(lattice.sites,s=>Number(Math.hypot(...s.p)<.29));
     // The export must remain a closed cubical complex throughout the search.
@@ -162,14 +164,75 @@
     return occupied;
   }
 
-  function optimizationRule() {
-    const {nodes,weights}=SAS.gaussLegendre(16), directions=[];
-    let sum=0;for(let p=8;p<16;p++)sum+=weights[p];
-    for(let p=8;p<16;p++)for(let a=0;a<32;a++) {
-      const phi=2*Math.PI*a/32,r=Math.sqrt(1-nodes[p]**2);
-      directions.push([r*Math.cos(phi),r*Math.sin(phi),nodes[p],weights[p]/(32*sum)]);
+  function optimizationRule(order = 16, azimuths = 4*order) {
+    const {nodes,weights}=SAS.gaussLegendre(order), directions=[];
+    let sum=0;for(let p=order/2;p<order;p++)sum+=weights[p];
+    for(let p=order/2;p<order;p++)for(let a=0;a<azimuths;a++) {
+      const phi=2*Math.PI*a/azimuths,r=Math.sqrt(1-nodes[p]**2);
+      directions.push([r*Math.cos(phi),r*Math.sin(phi),nodes[p],weights[p]/(azimuths*sum)]);
     }
     return directions;
+  }
+
+  function accuracyPlan(qD, size = 21, dataCount = 256) {
+    if(!Number.isFinite(qD)||qD<=0||qD>120)throw Error('The current browser solver supports q max × search diameter up to 120. Reduce the q range or search extent.');
+    const order=qD<=32?16:qD<=64?32:64,directions=2*order*order;
+    const maxSamples=Math.min(256,Math.floor(256*1024**2/(8*directions*(3*size+1))));
+    return {order,directions,samples:Math.min(dataCount,maxSamples),quality:order===16?'balanced':'fine',verificationDirections:order===16?2048:8192,
+      voxelPhase:qD/size};
+  }
+
+  const sphereAmplitude = x => Math.abs(x)<1e-3 ? 1-x*x/10+x**4/280 : 3*(Math.sin(x)-x*Math.cos(x))/x**3;
+
+  function ellipsoidPrefits(profile, diameter, size, attempts, progress=()=>{}) {
+    // Fit a few global dimensions before making local voxel moves. These are
+    // initial envelopes only; every delivered curve is recalculated from STL voxels.
+    const data=subset(profile,profile.q.at(-1),256),directions=optimizationRule(8,32),lower=diameter/size*.6,upper=diameter/2;
+    function evaluate(axes) {
+      const curve=new Float64Array(data.q.length),sphere=Math.max(...axes)-Math.min(...axes)<1e-8;
+      if(sphere)for(let i=0;i<curve.length;i++)curve[i]=sphereAmplitude(data.q[i]*axes[0])**2;
+      else for(const u of directions) {
+        const radius=Math.hypot(axes[0]*u[0],axes[1]*u[1],axes[2]*u[2]);
+        for(let i=0;i<curve.length;i++)curve[i]+=u[3]*sphereAmplitude(data.q[i]*radius)**2;
+      }
+      return {...fitScale(data,curve,profile.fitBackground),axes};
+    }
+    const scan=Array.from({length:48},(_,i)=>{
+      const r=lower*(upper/lower)**(i/47);return evaluate([r,r,r]);
+    });
+    let bestIndex=0;for(let i=1;i<scan.length;i++)if(scan[i].score<scan[bestIndex].score)bestIndex=i;
+    let lo=scan[Math.max(0,bestIndex-1)].axes[0],hi=scan[Math.min(47,bestIndex+1)].axes[0],sphere=scan[bestIndex];
+    for(let step=0;step<32;step++) {
+      const a=lo+(hi-lo)*.381966,b=lo+(hi-lo)*.618034,fa=evaluate([a,a,a]),fb=evaluate([b,b,b]);
+      if(fa.score<sphere.score)sphere=fa;if(fb.score<sphere.score)sphere=fb;
+      if(fa.score<fb.score)hi=b;else lo=a;
+    }
+    const clamp=x=>Math.max(Math.log(lower),Math.min(Math.log(upper),x));
+    const vertex=x=>({x:x.map(clamp),...evaluate(x.map(v=>Math.exp(clamp(v))))});
+    const results=[];
+    for(let attempt=0;attempt<attempts;attempt++) {
+      const r=sphere.axes[0],axes=attempt===1?[r*1.25,r/Math.sqrt(1.25),r/Math.sqrt(1.25)]:attempt===2?[r*1.15,r*1.15,r/1.15**2]:[r,r,r];
+      const start=axes.map(a=>clamp(Math.log(a))),simplex=[vertex(start)];
+      for(let a=0;a<3;a++){const x=[...start];x[a]+=x[a]>.5*(Math.log(lower)+Math.log(upper))?-.12:.12;simplex.push(vertex(x));}
+      for(let step=0;step<120;step++) {
+        simplex.sort((a,b)=>a.score-b.score);
+        const center=[0,1,2].map(a=>(simplex[0].x[a]+simplex[1].x[a]+simplex[2].x[a])/3),worst=simplex[3];
+        const reflected=vertex(center.map((x,a)=>2*x-worst.x[a]));
+        if(reflected.score<simplex[0].score) {
+          const expanded=vertex(center.map((x,a)=>x+2*(reflected.x[a]-x)));simplex[3]=expanded.score<reflected.score?expanded:reflected;
+        } else if(reflected.score<simplex[2].score)simplex[3]=reflected;
+        else {
+          const outside=reflected.score<worst.score,contracted=vertex(center.map((x,a)=>x+.5*((outside?reflected:worst).x[a]-x)));
+          if(contracted.score<(outside?reflected.score:worst.score))simplex[3]=contracted;
+          else for(let i=1;i<4;i++)simplex[i]=vertex(simplex[0].x.map((x,a)=>x+.5*(simplex[i].x[a]-x)));
+        }
+        if(step%30===0)progress((attempt+step/120)/attempts);
+      }
+      simplex.sort((a,b)=>a.score-b.score);
+      const best=simplex[0].score<sphere.score?simplex[0]:sphere;
+      results.push({axes:best.axes,wrms:best.wrms,method:'bounded Nelder-Mead ellipsoid initialization'});
+    }
+    progress(1);return results;
   }
 
   function subset(profile, qmax, limit=64) {
@@ -209,7 +272,7 @@
 
   function amplitudeCache(lattice, q, directions, progress = () => {}) {
     const width=q.length*directions.length, stride=width*2;
-    if(lattice.size<=11) {
+    if(lattice.size<=11 && lattice.sites.length*stride*4<=64*1024**2) {
       const values=new Float32Array(lattice.sites.length*stride);
       for(let i=0;i<lattice.sites.length;i++) {
         const p=lattice.sites[i].p;
@@ -246,21 +309,22 @@
 
   function reconstruct(profile, settings={}, progress=()=>{}) {
     const start=performance.now();
-    const diameter=Number(settings.diameter),size=Number(settings.size||11),iterations=Number(settings.iterations||5000),attempts=Number(settings.attempts||3),seed=Number(settings.seed||42),regularization=Number(settings.regularization??.3),background=!!settings.background;
+    const diameter=Number(settings.diameter),size=Number(settings.size||21),iterations=Number(settings.iterations||5000),attempts=Number(settings.attempts||3),seed=Number(settings.seed||42),regularization=Number(settings.regularization??.3),background=!!settings.background;
     const qmax=Math.min(Number(settings.qmax||profile.q.at(-1)),profile.q.at(-1));
-    if(!Number.isFinite(qmax)||qmax<=0||qmax*diameter>30.00001)throw Error('This reconstruction requires q max × search diameter ≤ 30. Lower q max or the search diameter.');
     if(!Number.isInteger(iterations)||iterations<500||iterations>100000||![1,3].includes(attempts)||!Number.isFinite(seed)||!Number.isFinite(regularization)||regularization<0||regularization>5)throw Error('Invalid reconstruction settings.');
-    const used=subset(profile,qmax,5000),sample=subset(used,qmax),lattice=makeLattice(size,diameter),directions=optimizationRule();
+    const lattice=makeLattice(size,diameter),used=subset(profile,qmax,5000),plan=accuracyPlan(qmax*diameter,size,used.q.length),sample=subset(used,qmax,plan.samples),directions=optimizationRule(plan.order);
+    progress({stage:'Fitting global envelope dimensions',fraction:0});
+    const prefits=ellipsoidPrefits({...used,fitBackground:background},diameter,size,attempts,fraction=>progress({stage:'Fitting global envelope dimensions',fraction:.08*fraction}));
     const nq=sample.q.length,nd=directions.length,width=nq*nd,factors=new Float64Array(width);
     for(let q=0;q<nq;q++)for(let d=0;d<nd;d++) {
       const dir=directions[d],v=sample.q[q]*diameter/(2*size);
       factors[q*nd+d]=dir[3]*(sinc(v*dir[0])*sinc(v*dir[1])*sinc(v*dir[2]))**2;
     }
     progress({stage:'Preparing angular amplitudes',fraction:0});
-    const cache=amplitudeCache(lattice,sample.q,directions,fraction=>progress({stage:'Preparing angular amplitudes',fraction:.1*fraction}));
+    const cache=amplitudeCache(lattice,sample.q,directions,fraction=>progress({stage:'Preparing angular amplitudes',fraction:.08+.08*fraction}));
     const candidates=[];
     for(let attempt=0;attempt<attempts;attempt++) {
-      const random=SAS.random(seed+attempt*7919),occupied=initialShape(lattice,profile.rg,attempt),amplitude=new Float64Array(width*2);
+      const random=SAS.random(seed+attempt*7919),occupied=initialShape(lattice,profile.rg,attempt,prefits[attempt].axes),amplitude=new Float64Array(width*2);
       let count=occupied.reduce((a,b)=>a+b,0),surface=0;
       for(let i=0;i<occupied.length;i++)if(occupied[i]) {
         const values=cache.get(i);
@@ -282,11 +346,13 @@
       }
       const compactness=(area,n)=>area/(6*n**(2/3));
       let current=evaluate(),energy=current.score+regularization*compactness(surface,count),best={occupied:occupied.slice(),...current,energy,count,surface};
+      let executedSteps=0,checkpoint=Infinity;
       for(let step=0;step<iterations;step++) {
+        executedSteps=step+1;
         let site=-1,neighbors=0;
         for(let trial=0;trial<30;trial++) {
           const candidate=Math.floor(random()*occupied.length),near=lattice.neighbors[candidate].reduce((sum,j)=>sum+(j>=0?occupied[j]:0),0);
-          if((occupied[candidate]&&near<6&&count>12)||(!occupied[candidate]&&near>0&&count<occupied.length*.9)){site=candidate;neighbors=near;break;}
+          if((occupied[candidate]&&near<6&&count>12)||(!occupied[candidate]&&near>0)){site=candidate;neighbors=near;break;}
         }
         if(site>=0) {
           const sign=occupied[site]?-1:1,nextCount=count+sign,nextSurface=surface+sign*(6-2*neighbors);
@@ -303,19 +369,25 @@
             }
           }
         }
-        if(step%100===0||step===iterations-1)progress({stage:`Searching candidate ${attempt+1}/${attempts}`,fraction:.1+.8*(attempt+step/iterations)/attempts,attempt:attempt+1,step:step+1,iterations,wrms:best.wrms,q:sample.q,curve:Float64Array.from(best.curve,v=>v*best.scale+best.background)});
+        if(step%100===0||step===iterations-1)progress({stage:`Searching candidate ${attempt+1}/${attempts}`,fraction:.16+.74*(attempt+step/iterations)/attempts,attempt:attempt+1,step:step+1,iterations,wrms:best.wrms,q:sample.q,curve:Float64Array.from(best.curve,v=>v*best.scale+best.background)});
+        // Stop spending moves once a sub-unit weighted residual has stabilized.
+        // The independent all-data evaluation below still decides the reported fit.
+        if(executedSteps%500===0) {
+          if(executedSteps>=1000&&best.wrms<1&&checkpoint-best.energy<.005)break;
+          checkpoint=best.energy;
+        }
       }
       const mesh=voxelSTL(lattice,best.occupied);
       // Independent dense angular/FFT evaluation includes each voxel's exact
       // uniform-cube amplitude, so it describes the exported cubical geometry.
-      progress({stage:`Verifying candidate ${attempt+1}/${attempts}`,fraction:.1+.8*(attempt+1)/attempts});
-      const verified=SAS.isotropicScattering(centers(lattice,best.occupied),Math.max(4,qmax*diameter),'balanced',()=>{},1/size);
+      progress({stage:`Verifying candidate ${attempt+1}/${attempts}`,fraction:.16+.74*(attempt+1)/attempts});
+      const verified=SAS.isotropicScattering(centers(lattice,best.occupied),Math.max(4,qmax*diameter),plan.quality,()=>{},1/size);
       const rawCurve=Float64Array.from(used.q,q=>interpolate(verified.qD,verified.intensity,q*diameter)),fit=fitScale(used,rawCurve,background);
-      candidates.push({attempt:attempt+1,seed:seed+attempt*7919,occupied:best.occupied,points:centers(lattice,best.occupied),mesh,voxelCount:best.count,volume:best.count*(diameter/size)**3,compactness:compactness(best.surface,best.count),...fit,curve:Float64Array.from(rawCurve,v=>v*fit.scale+fit.background),optimizationWRMS:best.wrms});
+      candidates.push({attempt:attempt+1,seed:seed+attempt*7919,occupied:best.occupied,points:centers(lattice,best.occupied),mesh,voxelCount:best.count,volume:best.count*(diameter/size)**3,compactness:compactness(best.surface,best.count),...fit,curve:Float64Array.from(rawCurve,v=>v*fit.scale+fit.background),optimizationWRMS:best.wrms,initialization:prefits[attempt],executedSteps});
     }
     candidates.sort((a,b)=>(a.score+regularization*a.compactness)-(b.score+regularization*b.compactness));
     progress({stage:'Complete',fraction:1});
-    return {candidates,data:used,settings:{diameter,size,iterations,attempts,seed,regularization,background,qmax},optimizedPoints:sample.q.length,optimizationDirections:nd,verificationDirections:2048,amplitudeCache:{mode:cache.mode,bytes:cache.bytes},ms:performance.now()-start};
+    return {candidates,data:used,settings:{diameter,size,iterations,attempts,seed,regularization,background,qmax},optimizedPoints:sample.q.length,optimizationDirections:nd,verificationDirections:plan.verificationDirections,accuracy:plan,amplitudeCache:{mode:cache.mode,bytes:cache.bytes},ms:performance.now()-start};
   }
 
   function sphereExample(settings={}) {
@@ -333,6 +405,6 @@
     return {...prepareProfile(rows,true),generator:{type:'sphere',radius,lengthUnit:'Å',qmin,qmax,count,spacing,noiseSeed:1701,noiseSigmaMultiplier:.4}};
   }
 
-  const api={parseProfile,prepareProfile,fitScale,GRID_SIZES,makeLattice,amplitudeCache,localManifold,isConnected,initialShape,voxelSTL,centers,interpolate,reconstruct,sphereExample};
+  const api={parseProfile,prepareProfile,fitScale,GRID_SIZES,makeLattice,accuracyPlan,ellipsoidPrefits,amplitudeCache,localManifold,isConnected,initialShape,voxelSTL,centers,interpolate,reconstruct,sphereExample};
   root.SASInverse=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:self);

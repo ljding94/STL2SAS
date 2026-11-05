@@ -11,6 +11,7 @@ button.addEventListener('click',async()=>{
   const change=(id,value)=>{$(id).value=value;$(id).dispatchEvent(new win.Event('change',{bubbles:true}));};
   try{
     await wait(()=>win.SASInverse&&$('inverse-status'));
+    if($('inverse-size').value!=='21')throw Error('Default reconstruction grid is not very fine');
     const source=win.SASInverse.sphereExample(),csv=Array.from(source.q,(q,i)=>[q,source.intensity[i],source.sigma[i]].join(',')).join('\n');
     const transfer=new win.DataTransfer();transfer.items.add(new win.File([csv],'sphere-data.csv',{type:'text/csv'}));
     const beforeModel=$('model-name').textContent;
@@ -61,7 +62,15 @@ button.addEventListener('click',async()=>{
     }finally{win.URL.createObjectURL=oldURL;win.HTMLAnchorElement.prototype.click=oldClick;}
     change('inverse-gen-qmin','.001');change('inverse-gen-spacing','log');
     if(!$('inverse-data-summary').textContent.includes('log q spacing')||!$('inverse-stl').disabled)throw Error('Changing generator settings retained a stale fit');
-    output.textContent='PASS — data drop, cancellation, candidates, exports, forward round trip; adjustable generated q range and CSV; 31³ reconstruction, bounded cache and generator metadata; log spacing and stale-fit invalidation';output.dataset.pass='true';
+    if($('inverse-plot').dataset.qAxis!=='log')throw Error('Logarithmic data generation did not select a logarithmic plot axis');
+    const ctx=$('inverse-plot').getContext('2d'),oldArc=ctx.arc,xValues=[];
+    ctx.arc=function(x,y,...rest){xValues.push(x);return oldArc.call(this,x,y,...rest);};
+    try{
+      change('inverse-q-axis','linear');xValues.length=0;change('inverse-q-axis','log');
+      const gaps=xValues.slice(1,12).map((x,i)=>x-xValues[i]);
+      if(Math.max(...gaps)-Math.min(...gaps)>1e-6)throw Error('Log-spaced data points are not evenly spaced on the log plot');
+    }finally{ctx.arc=oldArc;}
+    output.textContent='PASS — data drop, cancellation, candidates, exports, forward round trip; adjustable generated q range and CSV; 21³ default, 31³ fit; true logarithmic plot spacing; stale-fit invalidation';output.dataset.pass='true';
   }catch(error){output.textContent='FAIL — '+error.message;}
   finally{button.disabled=false;}
 });

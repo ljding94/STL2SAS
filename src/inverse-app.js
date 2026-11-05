@@ -31,7 +31,10 @@
   }
   function resolutionHint() {
     const diameter = Number($('inverse-diameter').value), qmax = Number($('inverse-qmax').value), size = Number($('inverse-size').value);
-    $('inverse-resolution').textContent = `Voxel edge ≈ ${n(diameter/size)} ${unit()}; q max × diameter = ${n(qmax*diameter)} (limit 30).${size >= 15 ? ' Finer grids usually need more search steps; compare longer runs.' : ''}`;
+    try {
+      const plan=SASInverse.accuracyPlan(qmax*diameter,size,state.profile?.q.length||256);
+      $('inverse-resolution').textContent = `Voxel edge ≈ ${n(diameter/size)} ${unit()}; q max × diameter = ${n(qmax*diameter)}. Adaptive search: ${plan.directions.toLocaleString()} directions; final check: ${plan.verificationDirections.toLocaleString()}.${plan.voxelPhase>Math.PI ? ' This q range exceeds the grid’s spatial resolution; use a finer grid or smaller search extent.' : ''}`;
+    } catch(error) { $('inverse-resolution').textContent=error.message; }
   }
   function setProfile(profile, name, lengthUnit = 'Å', provenance = 'Uploaded isotropic intensity') {
     stop(true); state.profile = profile; state.name = name; state.provenance = provenance;
@@ -39,11 +42,12 @@
     $('inverse-unit').value = lengthUnit;
     const diameter = profile.suggestedDiameter || 8 / profile.q.at(-1);
     $('inverse-diameter').value = n(diameter, 5);
-    $('inverse-qmax').value = n(Math.min(profile.q.at(-1), 30 / diameter), 8);
+    $('inverse-qmax').value = n(Math.min(profile.q.at(-1), 120 / diameter), 8);
+    $('inverse-q-axis').value = profile.generator?.spacing === 'log' ? 'log' : 'linear';
     $('inverse-data-summary').textContent = `${name} · ${profile.q.length} points · q ${n(profile.q[0])}–${n(profile.q.at(-1))}. ${profile.hasSigma ? 'Supplied uncertainties.' : 'Assumed weights: 5% of I, with a low-q floor.'}${profile.rg ? ` Estimated Rg ≈ ${n(profile.rg)} ${lengthUnit}.` : 'No usable Guinier size estimate; set the search diameter.'} ${provenance}${profile.intensity.some(v => v <= 0) ? ' Nonpositive intensities are fitted but omitted from the log-intensity plot.' : ''}`;
     clearResult(); resolutionHint(); busy(false);
     const clipped = Number($('inverse-qmax').value) < profile.q.at(-1) * (1 - 1e-7);
-    status(clipped ? `Data loaded. The fit is limited to q ≤ ${n(Number($('inverse-qmax').value))} ${lengthUnit}⁻¹ by q max × diameter ≤ 30; the plot and input CSV retain the full generated range.` : 'Data loaded. Check the q unit and search diameter, then reconstruct.');
+    status(clipped ? `Data loaded. This browser implementation supports q max × diameter up to 120, so the fit ends at q = ${n(Number($('inverse-qmax').value))} ${lengthUnit}⁻¹. The plot and input CSV retain the full range.` : 'Data loaded. Check the q unit and search diameter, then reconstruct.');
   }
   async function loadFile(file) {
     if (!file) return;
@@ -89,6 +93,10 @@
     clearResult(); resolutionHint();
     if (state.profile) status('Settings changed. Reconstruct to generate new candidates.');
   });
+  $('inverse-q-axis').addEventListener('change', () => {
+    if($('inverse-q-axis').value==='log'&&state.profile?.q[0]===0){$('inverse-q-axis').value='linear';status('A logarithmic q axis needs a positive minimum q. The q = 0 point is retained on a linear axis.');}
+    drawPlot();
+  });
   $('inverse-run').addEventListener('click', () => {
     if (!state.profile || state.worker) return;
     try {
@@ -98,7 +106,7 @@
         iterations: Number($('inverse-iterations').value), attempts: Number($('inverse-attempts').value),
         seed: Number($('inverse-seed').value), regularization: Number($('inverse-regularization').value), background: $('inverse-background').checked
       };
-      if (settings.qmax * settings.diameter > 30.00001) throw Error('Lower maximum q or the search diameter: q max × diameter must be ≤ 30.');
+      SASInverse.accuracyPlan(settings.qmax*settings.diameter,settings.size,state.profile.q.length);
       clearResult(); busy(true); status('Preparing the search…', 'running');
       document.dispatchEvent(new CustomEvent('stl2sas:inverse-start'));
       const id = ++state.job, worker = state.worker = new Worker(sourceURL), started = performance.now(), lengthUnit = unit();
@@ -119,7 +127,8 @@
         $('inverse-candidate').disabled = false;
         for (const key of ['inverse-stl','inverse-fit','inverse-report','inverse-explore']) $(key).disabled = false;
         selectCandidate();
-        status(`${data.candidates.length} candidate${data.candidates.length > 1 ? 's' : ''} completed in ${((performance.now()-started)/1000).toFixed(1)} s. Compare shapes and residuals; a fit does not identify a unique structure.`, 'complete');
+        const poor=data.candidates[0].wrms>2;
+        status(`${data.candidates.length} candidate${data.candidates.length > 1 ? 's' : ''} completed in ${((performance.now()-started)/1000).toFixed(1)} s.${poor?' Residuals remain large; check the search extent, resolution, assumptions and longer runs.':' Compare shapes and residuals; a fit does not identify a unique structure.'}`, 'complete');
       };
       worker.onerror = () => { if (id === state.job) { stop(true); status('The reconstruction worker stopped. Try a smaller grid or fewer steps.', 'error'); } };
       worker.postMessage({type: 'reconstruct', id, profile: state.profile, settings});
@@ -130,7 +139,7 @@
   function selectCandidate() {
     const c = selected(), result = state.result; if (!c) return;
     state.mesh = SAS.prepareMesh(c.mesh, 'reconstructed.stl');
-    $('inverse-fit-stats').textContent = `Weighted RMS ${n(c.wrms)} · ${result.data.q.length} fitted points · q ${n(result.data.q[0])}–${n(result.data.q.at(-1))} ${result.lengthUnit}⁻¹ · scale ${n(c.scale)} · background ${n(c.background)} · final check: 2,048 directions. ${result.data.hasSigma ? 'Uses supplied σ.' : 'Uses assumed weights, not measured σ.'}`;
+    $('inverse-fit-stats').textContent = `Weighted RMS ${n(c.wrms)} · ${result.data.q.length} fitted points · q ${n(result.data.q[0])}–${n(result.data.q.at(-1))} ${result.lengthUnit}⁻¹ · scale ${n(c.scale)} · background ${n(c.background)} · final check: ${result.verificationDirections.toLocaleString()} directions. ${result.data.hasSigma ? 'Uses supplied σ.' : 'Uses assumed weights, not measured σ.'}${Math.abs(c.wrms-c.optimizationWRMS)>.5?' Search and final-check residuals differ; treat this candidate cautiously.':''}`;
     $('inverse-shape-caption').textContent = `${c.voxelCount} connected voxels · volume ${n(c.volume)} ${result.lengthUnit}³ · exact, unsmoothed envelope`;
     state.angles = [-24,30,12]; drawPlot(); drawShape();
   }
@@ -146,14 +155,16 @@
     if (!profile) { ctx.textAlign='center'; ctx.fillText('Load a curve to begin',w/2,h/2); return; }
     const c = selected(), fitted = state.result?.data, line = c ? {q:fitted.q,curve:c.curve} : state.live;
     const xmin = profile.q[0], xmax = profile.q.at(-1), left=55,right=w-15,top=16,bottom=h*.66,resTop=h*.79,resBottom=h-27;
+    const logAxis=$('inverse-q-axis').value==='log'&&xmin>0,transform=q=>logAxis?Math.log(q):q;
+    $('inverse-plot').dataset.qAxis=logAxis?'log':'linear';
     const positives = Array.from(profile.intensity).filter(v=>v>0).concat(line ? Array.from(line.curve).filter(v=>v>0) : []);
     const ymax = Math.ceil(Math.log10(Math.max(...positives))), ymin = Math.max(ymax-8,Math.floor(Math.log10(Math.min(...positives))));
-    const x = q => left+(q-xmin)/(xmax-xmin)*(right-left), y = v => bottom-(Math.log10(v)-ymin)/Math.max(1,ymax-ymin)*(bottom-top);
+    const x = q => left+(transform(q)-transform(xmin))/(transform(xmax)-transform(xmin))*(right-left), y = v => bottom-(Math.log10(v)-ymin)/Math.max(1,ymax-ymin)*(bottom-top);
     ctx.textAlign='right'; ctx.strokeStyle='#e8ede7'; ctx.lineWidth=1;
     for(let tick=ymin;tick<=ymax;tick++) { const yy=y(10**tick);ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(right,yy);ctx.stroke();ctx.fillText(`1e${tick}`,left-9,yy+4); }
     ctx.fillStyle='#64766a';ctx.textAlign='left';ctx.fillText('I(q)',left,10);
-    for(let i=0;i<=4;i++) {const q=xmin+(xmax-xmin)*i/4;ctx.textAlign='center';ctx.fillText(n(q,2),x(q),h-11);}
-    ctx.textAlign='right';ctx.fillText(`q (${state.result?.lengthUnit || unit()}⁻¹)`,right,h-1);
+    for(let i=0;i<=4;i++) {const q=logAxis?Math.exp(Math.log(xmin)+(Math.log(xmax)-Math.log(xmin))*i/4):xmin+(xmax-xmin)*i/4;ctx.textAlign='center';ctx.fillText(n(q,2),x(q),h-11);}
+    ctx.textAlign='right';ctx.fillText(`q (${state.result?.lengthUnit || unit()}⁻¹)${logAxis?' · log scale':''}`,right,h-1);
     ctx.save();ctx.beginPath();ctx.rect(left,top,right-left,bottom-top);ctx.clip();
     for(let i=0;i<profile.q.length;i++) {
       const value=profile.intensity[i];if(value<=0)continue;
@@ -208,7 +219,14 @@
   });
   $('inverse-report').addEventListener('click',()=>{
     const r=state.result;if(!r)return;
-    const report={format:'STL2SAS inverse 0.1',source:r.source,provenance:r.provenance,lengthUnit:r.lengthUnit,generator:r.data.generator||null,settings:r.settings,selectedCandidate:state.selected+1,elapsedMs:r.ms,optimizedPoints:r.optimizedPoints,optimizationDirections:r.optimizationDirections,verificationDirections:r.verificationDirections,amplitudeCache:r.amplitudeCache,weights:r.data.hasSigma?'supplied sigma':'assumed max(0.05*abs(I),0.002*low-q reference)',data:{q:Array.from(r.data.q),intensity:Array.from(r.data.intensity),sigma:Array.from(r.data.sigma)},candidates:r.candidates.map((c,i)=>({rank:i+1,seed:c.seed,voxelCount:c.voxelCount,volume:c.volume,compactness:c.compactness,scale:c.scale,background:c.background,weightedRMS:c.wrms,optimizationRMS:c.optimizationWRMS,fit:Array.from(c.curve),occupiedSites:Array.from(c.occupied),centersInLengthUnits:Array.from(c.points,x=>x*r.settings.diameter)})),limitations:['Nonunique, prior-dependent coarse envelope; not a validated structural determination.','Weighted RMS is not reduced chi-squared.','No polydispersity, structure factor, varying SLD, or instrument smearing.','Final check uses approximate angular quadrature and projection FFT.','The exported STL has no embedded length unit and is not smoothed.']};
+    const report={format:'STL2SAS inverse 0.2',source:r.source,provenance:r.provenance,lengthUnit:r.lengthUnit,generator:r.data.generator||null,
+      algorithm:'ellipsoid initialization + voxel simulated annealing',settings:r.settings,selectedCandidate:state.selected+1,elapsedMs:r.ms,
+      optimizedPoints:r.optimizedPoints,optimizationDirections:r.optimizationDirections,verificationDirections:r.verificationDirections,accuracy:r.accuracy,amplitudeCache:r.amplitudeCache,
+      weights:r.data.hasSigma?'supplied sigma':'assumed max(0.05*abs(I),0.002*low-q reference)',data:{q:Array.from(r.data.q),intensity:Array.from(r.data.intensity),sigma:Array.from(r.data.sigma)},
+      candidates:r.candidates.map((c,i)=>({rank:i+1,seed:c.seed,voxelCount:c.voxelCount,volume:c.volume,compactness:c.compactness,scale:c.scale,background:c.background,
+        weightedRMS:c.wrms,optimizationRMS:c.optimizationWRMS,initialization:c.initialization,executedSteps:c.executedSteps,
+        fit:Array.from(c.curve),occupiedSites:Array.from(c.occupied),centersInLengthUnits:Array.from(c.points,x=>x*r.settings.diameter)})),
+      limitations:['Nonunique, prior-dependent envelope; not a validated structural determination.','Weighted RMS is not reduced chi-squared.','No polydispersity, structure factor, varying SLD, or instrument smearing.','Final check uses approximate angular quadrature and projection FFT.','The exported STL has no embedded length unit and is not smoothed.']};
     download(JSON.stringify(report,null,2)+'\n','stl2sas-inverse-report.json','application/json');
   });
   window.addEventListener('beforeunload',()=>{stop(true);URL.revokeObjectURL(sourceURL);});

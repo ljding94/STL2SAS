@@ -3,6 +3,31 @@ const assert = require('node:assert/strict');
 const SAS = require('../src/core.js');
 const Inverse = require('../src/inverse.js');
 
+test('Screenshot regression: a 60 Å search region can recover the 30 Å-radius sphere', () => {
+  const p=Inverse.sphereExample({qmin:.004,qmax:.5,count:200,spacing:'log'});
+  const r=Inverse.reconstruct(p,{diameter:60,size:21,iterations:5000,attempts:1,qmax:.5}),c=r.candidates[0];
+  assert.ok(c.wrms<1,`screenshot regression RMS = ${c.wrms}`);
+  assert.ok(Math.abs(c.volume-4*Math.PI*30**3/3)/(4*Math.PI*30**3/3)<.05);
+  assert.equal(r.optimizedPoints,200,'fit the entire 200-point screenshot dataset');
+  assert.equal(r.verificationDirections,2048);assert.ok(c.initialization.axes.every(a=>a>29&&a<=30));
+  assert.ok(SAS.prepareMesh(c.mesh,'screenshot-fit.stl').faces>0);
+});
+
+test('Angular accuracy adapts beyond qD 30 within a bounded cache budget', () => {
+  const low=Inverse.accuracyPlan(30,21,200),medium=Inverse.accuracyPlan(60,21,200),high=Inverse.accuracyPlan(110,31,5000);
+  assert.ok(medium.directions>low.directions);assert.ok(high.directions>medium.directions);
+  assert.equal(medium.verificationDirections,8192);
+  assert.ok((3*31+1)*8*high.directions*high.samples<=256*1024**2);
+  assert.throws(()=>Inverse.accuracyPlan(121,21,200),/up to 120/);
+});
+
+test('A real reconstruction above the former qD limit retains the selected range', () => {
+  const p=Inverse.sphereExample({qmin:.004,qmax:.5,count:24});
+  const r=Inverse.reconstruct(p,{diameter:80,size:15,iterations:500,attempts:1,qmax:.5});
+  assert.equal(r.data.q.at(-1),.5);assert.equal(r.optimizationDirections,2048);assert.equal(r.verificationDirections,8192);
+  assert.ok(Number.isFinite(r.candidates[0].wrms));
+});
+
 test('Synthetic sphere data honors q bounds, point count, spacing, zero q, and deterministic noise', () => {
   const p=Inverse.sphereExample({qmin:0,qmax:.3,count:301});
   assert.equal(p.q.length,301);assert.equal(p.q[0],0);assert.equal(p.q.at(-1),.3);
@@ -108,7 +133,7 @@ test('Independent starts produce closed candidates; excessive q range and insuff
   const profile=Inverse.sphereExample(),result=Inverse.reconstruct(profile,{diameter:90,size:9,iterations:500,attempts:3,qmax:.14});
   assert.equal(result.candidates.length,3);assert.equal(new Set(result.candidates.map(c=>c.seed)).size,3);
   for(const c of result.candidates)assert.ok(SAS.prepareMesh(c.mesh,'candidate.stl').faces>0);
-  assert.throws(()=>Inverse.reconstruct(profile,{diameter:300,qmax:.14}),/≤ 30/);
+  assert.throws(()=>Inverse.reconstruct(profile,{diameter:3000,qmax:.14}),/up to 120/);
   assert.throws(()=>Inverse.reconstruct(profile,{diameter:80,qmax:.004}),/at least 8/);
 });
 
