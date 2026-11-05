@@ -407,10 +407,11 @@
   // Orientational average of INTENSITY, not amplitude, using all original points.
   // Each direction needs one O(N) projection and one small 1D FFT. The particle
   // stays in its body frame: display rotations never enter this calculation.
-  function isotropicScattering(points, qMaxD = 120, quality = 'quick', progress = () => {}) {
+  function isotropicScattering(points, qMaxD = 120, quality = 'quick', progress = () => {}, voxelSize = 0) {
     const count = points.length / 3;
     if (!Number.isInteger(count) || !count) throw Error('No scattering points.');
     if (!(qMaxD >= 4 && qMaxD <= 120)) throw Error('qD must be between 4 and 120.');
+    if (!Number.isFinite(voxelSize) || voxelSize < 0) throw Error('Invalid voxel size.');
     const {vectors, weights, directions, method, polarOrder, azimuthCount} = isotropicDirectionRule(quality);
     // Eight-fold real-space oversampling; zero padding yields 513 radial q values.
     const gridSize = 8192, bins = gridSize / 16 + 1, scale = 8 * qMaxD / Math.PI;
@@ -424,7 +425,7 @@
       radius = Math.max(radius, Math.hypot(centered[i], centered[i + 1], centered[i + 2]));
     }
     if (!Number.isFinite(radius) || radius >= gridSize / 2 - 2) throw Error('Point cloud exceeds the isotropic projection box.');
-    if (radius < 1e-12) { intensity.fill(1); progress(1); return {qD, intensity, count, qMaxD, quality, directions, method, polarOrder, azimuthCount, gridSize}; }
+    if (radius < 1e-12 && !voxelSize) { intensity.fill(1); progress(1); return {qD, intensity, count, qMaxD, quality, directions, method, polarOrder, azimuthCount, gridSize}; }
     const norm = 1 / (count * count), tick = Math.max(1, Math.floor(directions / 100));
     for (let direction = 0; direction < directions; direction++) {
       const nx = vectors[direction * 3], ny = vectors[direction * 3 + 1], nz = vectors[direction * 3 + 2], weight = weights[direction];
@@ -435,7 +436,12 @@
         real[ix] += 1 - fraction; real[ix + 1] += fraction;
       }
       fft1D(real, imag, 0, 1, gridSize, plan);
-      for (let k = 0; k < bins; k++) intensity[k] += weight * (real[k] * real[k] + imag[k] * imag[k]) * norm * correction[k];
+      for (let k = 0; k < bins; k++) {
+        // An occupied inverse-model voxel is a uniform cube, not a point bead.
+        const t = qD[k] * voxelSize / 2;
+        const cell = voxelSize ? sinc(t * nx) * sinc(t * ny) * sinc(t * nz) : 1;
+        intensity[k] += weight * (real[k] * real[k] + imag[k] * imag[k]) * norm * correction[k] * cell * cell;
+      }
       if ((direction + 1) % tick === 0 || direction + 1 === directions) progress((direction + 1) / directions);
     }
     intensity[0] = 1;

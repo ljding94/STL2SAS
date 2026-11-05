@@ -1,0 +1,48 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>STL2SAS inverse browser checks</title>
+<style>body{font:14px system-ui;margin:20px}button{padding:10px}iframe{width:100%;height:820px;border:1px solid #ddd}pre{white-space:pre-wrap}</style>
+<h1>Inverse workflow regression</h1><p>Checks data drop, cancellation, independent candidates, exports and return to forward mode.</p>
+<button id="run">Run inverse workflow checks</button><pre id="result">Ready</pre><iframe id="app" src="../index.html"></iframe>
+<script>
+const output=document.getElementById('result'),button=document.getElementById('run');
+button.addEventListener('click',async()=>{
+  button.disabled=true;output.textContent='Running…';output.dataset.pass='false';
+  const win=document.getElementById('app').contentWindow,doc=win.document,$=id=>doc.getElementById(id);
+  const wait=async test=>{const start=Date.now();while(!test()){if(Date.now()-start>45000)throw Error('Timed out: '+$('inverse-status')?.textContent);await new Promise(resolve=>setTimeout(resolve,30));}};
+  const change=(id,value)=>{$(id).value=value;$(id).dispatchEvent(new win.Event('change',{bubbles:true}));};
+  try{
+    await wait(()=>win.SASInverse&&$('inverse-status'));
+    const source=win.SASInverse.sphereExample(),csv=Array.from(source.q,(q,i)=>[q,source.intensity[i],source.sigma[i]].join(',')).join('\n');
+    const transfer=new win.DataTransfer();transfer.items.add(new win.File([csv],'sphere-data.csv',{type:'text/csv'}));
+    const beforeModel=$('model-name').textContent;
+    $('inverse-drop').dispatchEvent(new win.DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}));
+    await wait(()=>$('inverse-data-summary').textContent.includes('sphere-data.csv'));
+    if($('model-name').textContent!==beforeModel)throw Error('Data drop reached the STL importer');
+    $('inverse-run').click();await wait(()=>!$('inverse-stop').hidden);$('inverse-stop').click();
+    if($('inverse-status').dataset.state!=='stopped'||!$('inverse-stl').disabled)throw Error('Cancelled run left stale outputs');
+    change('inverse-size','9');change('inverse-iterations','1000');
+    $('inverse-run').click();await wait(()=>$('inverse-status').dataset.state==='complete'||$('inverse-status').dataset.state==='error');
+    if($('inverse-status').dataset.state==='error')throw Error($('inverse-status').textContent);
+    if($('inverse-candidate').options.length!==3)throw Error('Missing independent candidates');
+    change('inverse-candidate','1');
+    const urls=new Map(),downloads=[];
+    const oldURL=win.URL.createObjectURL,oldClick=win.HTMLAnchorElement.prototype.click;
+    win.URL.createObjectURL=function(blob){const url=oldURL.call(win.URL,blob);urls.set(url,blob);return url;};
+    win.HTMLAnchorElement.prototype.click=function(){if(this.download)downloads.push({name:this.download,blob:urls.get(this.href)});else oldClick.call(this);};
+    try{
+      $('inverse-stl').click();$('inverse-fit').click();$('inverse-report').click();
+      if(downloads.length!==3)throw Error('Missing exports');
+      const mesh=win.SAS.prepareMesh(await downloads[0].blob.arrayBuffer(),'fit.stl');
+      if(!mesh.faces)throw Error('Empty STL');
+      const fit=await downloads[1].blob.text(),report=JSON.parse(await downloads[2].blob.text());
+      if(!fit.includes('weighted_residual')||report.candidates.length!==3||report.selectedCandidate!==2)throw Error('Incomplete fit or report metadata');
+      change('point-count','5000');await wait(()=>$('isotropic-status').dataset.ready==='true');
+      $('inverse-explore').click();await wait(()=>$('model-name').textContent==='inverse-candidate-2.stl'&&$('isotropic-status').dataset.ready==='true');
+      if($('unit').value!=='Å')throw Error('Reconstruction length unit was not preserved');
+    }finally{win.URL.createObjectURL=oldURL;win.HTMLAnchorElement.prototype.click=oldClick;}
+    $('inverse-current').click();await wait(()=>$('inverse-data-summary').textContent.includes('forward curve'));
+    if(!$('inverse-stl').disabled)throw Error('New curve retained a stale reconstruction');
+    output.textContent='PASS — data drag/drop isolation; cancellation; three candidates; valid STL, fit CSV and report; forward handoff and units; forward curve import';output.dataset.pass='true';
+  }catch(error){output.textContent='FAIL — '+error.message;}
+  finally{button.disabled=false;}
+});
+</script></html>

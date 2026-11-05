@@ -91,7 +91,7 @@
     if (!state.result) setComputeStatus('Updating');
     if (state.busy) state.pending = job; else sendCalculation(job);
   }
-  async function loadModel(newModel = false) {
+  async function loadModel(newModel = false, fileUnit = 'unit') {
     const version = ++state.sampleVersion;
     state.result = null;
     if (sampleWorker) sampleWorker.terminate();
@@ -121,7 +121,7 @@
         state.dimensions = data.dimensions; state.nativeSpan = data.span;
         state.faces = data.faces; state.sampleMs = data.ms;
         state.volume = data.volume;
-        if (newModel) { $('size-value').value = data.span; if (state.file) $('unit').value = 'unit'; }
+        if (newModel) { $('size-value').value = data.span; if (state.file) $('unit').value = fileUnit; }
         $('model-name').textContent = state.file ? state.file.name : names[state.shape];
         $('model-type').textContent = state.file ? `${fmt(data.faces)} FACES` : 'EXAMPLE';
         $('stage-point-count').textContent = `${fmt(data.points.length / 3)} points`;
@@ -320,19 +320,33 @@
   const observer = new ResizeObserver(() => { modelDirty = true; drawProfile(); }); observer.observe($('model-stage')); observer.observe($('profile-canvas').parentElement);
 
   $('drop-zone').addEventListener('click', () => $('file-input').click());
-  function acceptFile(file, exampleKey = 'custom') {
+  function acceptFile(file, exampleKey = 'custom', fileUnit = 'unit') {
     if (!file) return;
     if (!/\.(stl|obj)$/i.test(file.name)) { notice('Choose an STL or OBJ model. More formats can be added in a future version.', true); return; }
-    state.file = file; state.shape = null; $('example').value = exampleKey; $('download-example').disabled = false; loadModel(true);
+    state.file = file; state.shape = null; $('example').value = exampleKey; $('download-example').disabled = false; loadModel(true, fileUnit);
   }
   function acceptFiles(files) { acceptFile(Array.from(files).find(file => /\.(stl|obj)$/i.test(file.name)) || files[0]); }
   $('file-input').addEventListener('change', event => { acceptFiles(event.target.files); event.target.value = ''; });
   const removeFileDrop = ModelFileDrop.install({
     zone: $('drop-zone'), surface: window, onFiles: acceptFiles,
+    shouldHandle: event => !event.target.closest?.('#inverse'),
     onDragState: active => {
       $('drop-title').textContent = active ? 'Release to load your model' : 'Drag & drop your model';
       $('drop-subtitle').textContent = active ? 'Drop an STL or OBJ file here' : 'STL or OBJ · or click to browse';
     }
+  });
+  document.addEventListener('stl2sas:load-reconstruction', ({detail}) => {
+    acceptFile(new File([detail.mesh], detail.name, {type: 'model/stl'}), 'custom', detail.unit);
+    $('model-stage').scrollIntoView({behavior: 'smooth', block: 'center'});
+  });
+  document.addEventListener('stl2sas:inverse-start', () => { state.auto = false; updateAutoButton(); });
+  document.addEventListener('stl2sas:profile-request', () => {
+    if (!state.isotropic || state.sampling) {
+      document.dispatchEvent(new CustomEvent('stl2sas:profile', {detail: {error: 'Wait for the forward isotropic curve to finish calculating.'}})); return;
+    }
+    const iso = state.isotropic, rows = [];
+    for (let i = 0; i < iso.qD.length && iso.qD[i] <= Number($('q-range').value); i++) rows.push([iso.qD[i]/length(), iso.intensity[i]]);
+    document.dispatchEvent(new CustomEvent('stl2sas:profile', {detail: {rows, unit: unit(), name: `${state.file?.name || names[state.shape]} · forward curve`, method: `${iso.directions} directions, ${iso.count} volume points`}}));
   });
   function exampleFile(key) {
     const sample = examples[key], bytes = Uint8Array.from(atob(sample.base64), c => c.charCodeAt(0));

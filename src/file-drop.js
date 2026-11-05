@@ -10,7 +10,7 @@
   function isFileDrag(transfer) {
     return !!transfer && (Array.from(transfer.types || []).some(type => type.toLowerCase() === 'files') || Array.from(transfer.items || []).some(item => item.kind === 'file') || !!transfer.files?.length);
   }
-  function install({zone, surface, onFiles, onDragState = () => {}}) {
+  function install({zone, surface, onFiles, onDragState = () => {}, shouldHandle = () => true}) {
     const listeners = [];
     const listen = (target, type, fn, capture = false) => { target.addEventListener(type, fn, capture); listeners.push(() => target.removeEventListener(type, fn, capture)); };
     let active = false;
@@ -19,12 +19,14 @@
       active = value; zone.classList.toggle('dragging', value); onDragState(value);
     }
     function allow(event) {
+      if (!shouldHandle(event)) { highlight(false); return; }
       if (!isFileDrag(event.dataTransfer)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
       highlight(true);
     }
     function receive(event) {
+      if (!shouldHandle(event)) { highlight(false); return; }
       if (!isFileDrag(event.dataTransfer)) return;
       event.preventDefault(); event.stopPropagation(); highlight(false);
       const files = filesFrom(event.dataTransfer);

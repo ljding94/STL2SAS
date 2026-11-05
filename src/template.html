@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#f4f5f2">
-<meta name="description" content="Drop a 3D model into your browser and explore its small-angle scattering on three reciprocal-space planes. Private, offline, and interactive.">
+<meta name="description" content="Explore small-angle scattering from a 3D model, or fit an experimental shape envelope to an isotropic scattering curve. Private, offline, and interactive.">
 <title>STL2SAS · Scattering workbench</title>
 <link rel="icon" type="image/svg+xml" href="/*__FAVICON__*/">
 <style>/*__STYLES__*/</style>
@@ -37,7 +37,7 @@
   <div class="sidebar-footer"><span class="privacy-icon">◈</span><div><strong>Your files stay here.</strong><p>No uploads. No server calculation.<br>Works offline as a single HTML file.</p></div></div>
 </aside>
 <main>
-  <div class="page-heading"><div><div class="eyebrow">REAL-SPACE MODEL → RECIPROCAL-SPACE PATTERN</div><h1>From shape to scattering<span>.</span></h1><p>Rotate a particle. Watch its scattering change.</p></div><button id="export" class="primary-button" title="Export the latest completed scattering frame, including its orientation" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v10m-4-4 4 4 4-4M3 13v4h14v-4"/></svg>Export data</button></div>
+  <div class="page-heading"><div><div class="eyebrow">REAL-SPACE MODEL ↔ RECIPROCAL-SPACE PATTERN</div><h1>From shape to scattering<span>.</span></h1><p>Rotate a particle. Watch its scattering change. <a class="inverse-jump" href="#inverse">Or reconstruct a shape ↓</a></p></div><button id="export" class="primary-button" title="Export the latest completed scattering frame, including its orientation" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v10m-4-4 4 4 4-4M3 13v4h14v-4"/></svg>Export data</button></div>
   <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
   <div class="workspace-grid">
     <section class="card model-card">
@@ -58,6 +58,40 @@
     </section>
   </div>
   <section class="card profile-card"><div class="profile-intro"><span class="card-kicker">SCATTERING PROFILES</span><h2>A closer look at I(q)</h2><p>Plane averages follow orientation.<br>The isotropic average stays fixed.</p><div class="plot-legend"><span><i class="isotropic-line"></i>Isotropic</span><span><i class="xy"></i>XY</span><span><i class="xz"></i>XZ</span><span><i class="yz"></i>YZ</span></div><label class="analytic-toggle"><input id="analytic" type="checkbox" checked> Analytic plane reference</label></div><div class="profile-plot"><canvas id="profile-canvas" aria-label="Log intensity versus q: fixed three-dimensional isotropic average and rotating XY, XZ, YZ azimuthal averages"></canvas></div><div class="profile-controls"><label for="isotropic-quality">Isotropic accuracy <select id="isotropic-quality"><option value="quick" selected>Quick · 40 directions</option><option value="fast">Fast · 512 directions</option><option value="balanced">Balanced · 2,048</option><option value="fine">Fine · 8,192</option></select></label><span id="isotropic-status" role="status" aria-live="polite" data-ready="false">Waiting for model…</span><button id="export-profiles" class="secondary-button" disabled>Export profiles</button></div></section>
+  <section class="card inverse-card" id="inverse" aria-labelledby="inverse-heading">
+    <div class="inverse-heading"><div><span class="card-kicker">THE INVERSE PROBLEM · EXPERIMENTAL</span><h2 id="inverse-heading">From scattering to a possible shape.</h2><p>Fit a connected, uniform-density envelope to an isotropic I(q) curve.</p></div><span class="tag">LOCAL COMPUTATION</span></div>
+    <p class="inverse-context">A 1D curve can support many different 3D shapes. Compare independent searches; treat each result as a candidate under the selected size and compactness constraints.</p>
+    <div class="inverse-layout">
+      <div class="inverse-controls">
+        <input type="file" id="inverse-file" accept=".txt,.dat,.csv" hidden>
+        <button id="inverse-drop" class="drop-zone"><strong>Drop scattering data here</strong><span>q, I(q), optional σ · TXT, DAT or CSV</span><small>q in radians per length · max 2 MB</small></button>
+        <div class="inverse-source-buttons"><button id="inverse-demo" class="secondary-button">Try a sphere dataset</button><button id="inverse-current" class="secondary-button">Use forward curve</button></div>
+        <p class="inverse-data-summary" id="inverse-data-summary">Load a curve, or start with the synthetic sphere example.</p>
+        <fieldset id="inverse-settings">
+          <legend class="sr-only">Reconstruction settings</legend>
+          <div class="two-fields"><div><label class="field-label" for="inverse-diameter">Search diameter</label><input id="inverse-diameter" type="number" value="94" min="0.000001" max="1000000000" step="any"></div><div><label class="field-label" for="inverse-unit">Length unit</label><select id="inverse-unit"><option value="Å" selected>Å</option><option value="nm">nm</option><option value="µm">µm</option><option value="mm">mm</option><option value="unit">model unit</option></select></div></div>
+          <p class="hint">Bounding sphere diameter, in the inverse of your q unit. The suggested size is only a rough Guinier estimate.</p>
+          <div class="two-fields"><div><label class="field-label" for="inverse-qmax">Maximum q to fit</label><input id="inverse-qmax" type="number" value="0.14" min="0.000000001" step="any"></div><div><label class="field-label" for="inverse-size">Grid resolution</label><select id="inverse-size"><option value="9">9³ · quick</option><option value="11" selected>11³ · finer</option></select></div></div>
+          <p id="inverse-resolution" class="hint">The coarse model requires q max × diameter ≤ 30.</p>
+          <div class="two-fields"><div><label class="field-label" for="inverse-iterations">Steps per search</label><select id="inverse-iterations"><option value="1000">1,000 · preview</option><option value="5000" selected>5,000 · standard</option><option value="15000">15,000 · longer</option></select></div><div><label class="field-label" for="inverse-attempts">Independent searches</label><select id="inverse-attempts"><option value="3" selected>3 · compare shapes</option><option value="1">1 · quick check</option></select></div></div>
+          <div class="two-fields"><div><label class="field-label" for="inverse-regularization">Compactness prior</label><select id="inverse-regularization"><option value="0">Off · 0</option><option value="0.3" selected>Mild · 0.3</option><option value="1">Strong · 1</option></select></div><div><label class="field-label" for="inverse-seed">Random seed</label><input id="inverse-seed" type="number" min="1" max="2147483647" step="1" value="42"></div></div>
+          <label class="analytic-toggle inverse-background"><input id="inverse-background" type="checkbox"> Fit a nonnegative constant background</label>
+        </fieldset>
+        <div class="inverse-run-buttons"><button id="inverse-run" class="primary-button" disabled>Reconstruct shape</button><button id="inverse-stop" class="secondary-button" hidden>Stop</button></div>
+        <progress id="inverse-progress" max="1" value="0" aria-label="Reconstruction progress"></progress>
+        <p id="inverse-status" class="inverse-status" role="status" aria-live="polite" data-state="empty">Ready when you are.</p>
+      </div>
+      <div class="inverse-results">
+        <div class="inverse-plot-heading"><strong>Data & fit</strong><span><i class="inverse-data-dot"></i>Data <i class="inverse-fit-line"></i>Candidate</span></div>
+        <canvas id="inverse-plot" aria-label="Scattering data, fitted intensity, and weighted residuals versus q"></canvas>
+        <p id="inverse-fit-stats" class="inverse-fit-stats">The fit and weighted residuals will appear here.</p>
+        <div class="inverse-candidate-row"><label for="inverse-candidate">Candidate</label><select id="inverse-candidate" disabled><option>Run a reconstruction first</option></select></div>
+        <div class="inverse-shape-stage"><canvas id="inverse-shape" tabindex="0" aria-label="Reconstructed envelope. Drag or use arrow keys to rotate."></canvas><span id="inverse-shape-caption">A candidate envelope will appear here.</span><span class="inverse-shape-hint">Drag to inspect · arrow keys to rotate</span></div>
+        <div class="inverse-downloads"><button id="inverse-stl" class="primary-button" disabled>↓ Download STL</button><button id="inverse-explore" class="secondary-button" disabled>Explore in forward mode ↑</button><button id="inverse-fit" class="secondary-button" disabled>Fit CSV</button><button id="inverse-report" class="secondary-button" disabled>Run report</button></div>
+      </div>
+    </div>
+    <details class="inverse-method"><summary>What this reconstruction assumes</summary><p>This is an independent simulated-annealing prototype, inspired by bead-model methods such as <a href="https://www.embl-hamburg.de/biosaxs/dammin.html" target="_blank" rel="noopener noreferrer">DAMMIN</a>. It searches connected, constant-contrast voxels inside a fixed sphere. Local occupancy changes update cached amplitudes; the objective combines weighted intensity residuals and a surface-area compactness prior. Scale is fitted analytically; optional background is constrained nonnegative.</p><p>Up to 64 q values and 256 angular directions guide the search. Each final candidate is evaluated against every retained data point with 2,048 directions and an oversampled projection FFT. The finite cube form factor is included. STL exports are the exact block-shaped envelopes used in the fit, without smoothing. They have no embedded length unit; keep the run report.</p><p>Two-column input uses assumed σ = max(5% |I|, 0.2% of the low-q reference); it does not acquire experimental error bars. The reported weighted RMS is not reduced χ² or evidence for a unique structure. This MVP assumes a dilute, monodisperse particle with uniform contrast, no structure factor or instrument smearing. Grid size, q range, size constraint, incomplete search and angular integration can all affect the result. Cavities and handles may occur; only material connectivity is enforced globally.</p></details>
+  </section>
   <div class="metrics"><div><span>SCATTERING POINTS</span><strong id="metric-points">—</strong><small>uniform volume sampling</small></div><div><span>LAST CALCULATION</span><strong id="metric-time">—</strong><small id="metric-grid">three 128 × 128 planes</small></div><div><span>RADIUS OF GYRATION</span><strong id="metric-rg">—</strong><small>estimated from sampled points</small></div><div><span>SAMPLING FLOOR</span><strong id="metric-floor">—</strong><small>finite-point noise ≈ 1 / N</small></div></div>
   <footer><span>STL2SAS <b> / </b> Single-particle form factor · uniform contrast</span><button id="method-footer" class="text-button">Method & limitations ↗</button></footer>
 </main>
@@ -66,6 +100,8 @@
 <script id="example-data" type="application/json">/*__EXAMPLES__*/</script>
 <script id="worker-source" type="text/plain">/*__WORKER__*/</script>
 <script>/*__CORE__*/</script>
+<script>/*__INVERSE__*/</script>
 <script>/*__DROP__*/</script>
 <script>/*__APP__*/</script>
+<script>/*__INVERSE_APP__*/</script>
 </body></html>

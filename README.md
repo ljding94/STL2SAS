@@ -1,6 +1,6 @@
 # STL2SAS
 
-A minimal, offline 3D-model-to-small-angle-scattering workbench. Open **`index.html`** in a modern browser and drop an STL or OBJ file onto the page. No installation, network connection, or server is needed. All calculations stay on your device.
+A minimal, offline small-angle-scattering workbench: explore scattering from an STL/OBJ model, or reconstruct a coarse candidate envelope from an isotropic intensity curve. Open **`index.html`** in a modern browser. No installation, network connection, or server is needed. All calculations stay on your device.
 
 [Open STL2SAS](https://stl2sas.ljding.app/) · [All apps at ljding.app](https://ljding.app/) · [GitHub repository](https://github.com/ljding94/STL2SAS) · [Cloudflare hosting guide](docs/CLOUDFLARE.md) · [Example files and attribution](examples/README.md)
 
@@ -20,6 +20,18 @@ For your existing repository, follow the hosting guide to connect it directly. T
 8. **Export data** saves `stl2sas-planes.csv` with the three directional detector maps. **Export profiles** saves `stl2sas-profiles.csv` with isotropic and plane-average curves, physical q coordinates, and method/rotation metadata. Both remain available during rotation and capture the latest completed scattering frame, including that frame's orientation. Loading or resampling a model disables export until fresh results are ready. At 512² the detector CSV is large; use 128² for a quick export.
 
 The app is a single portable file: you can copy `index.html` to another computer. Its source is kept separately in `src/` for development. Current Chrome, Edge, Firefox, or Safari is recommended; the page uses Blob Web Workers, Canvas 2D, and native HTML dialogs.
+
+## Experimental inverse reconstruction
+
+Select **Or reconstruct a shape** near the page title, or scroll to **From scattering to a possible shape**.
+
+1. Drop a TXT, DAT or CSV containing `q, I(q)` or `q, I(q), sigma`. Headers and comment lines starting with `#`, `;` or `//` are accepted. An isotropic curve from this app's **Export profiles** CSV is also accepted. Choose **Try a sphere dataset** for a reproducible synthetic example, or **Use forward curve** for a round trip from the current model.
+2. Check the q unit and **search diameter**. A q value in Å⁻¹ needs lengths in Å; units are labels and are not converted. The search diameter bounds a spherical domain, not the reconstructed object's eventual size. The initial suggestion of 4 Rg is only a heuristic from a simple Guinier estimate.
+3. Start with the defaults: an 11³ grid, 5,000 attempted moves per search, three independent starts, and a mild compactness prior. The search uses only sites within the sphere. The MVP limits `q_max × search_diameter ≤ 30`; its block-shaped geometry cannot resolve fine surface detail.
+4. **Reconstruct shape** fits scale and, optionally, a nonnegative constant background. **Stop** cancels the worker and discards the incomplete search. Starting a search pauses the forward auto-rotation to reduce competing work.
+5. Compare the candidate selector, fit plot, weighted residuals and rotatable envelope. **Download STL**, **Fit CSV**, and **Run report** save the selected geometry, numerical fit, and reproducibility metadata. **Explore in forward mode** loads the reconstructed STL into the original calculator with its physical unit retained. A new input or changed setting clears previous results.
+
+This is a **prior-dependent, experimental shape-reconstruction prototype**, not a unique inversion or a validated replacement for ATSAS. Different structures can fit the same isotropic curve, including mirror-related structures. Three starts help expose variation but are not an uncertainty estimate. The synthetic sphere test is an implementation check, not validation on experimental data. See [the inverse method and limitations](docs/INVERSE.md) for the objective, numerical approximations, weighting and export conventions.
 
 ## Numerical method
 
@@ -96,12 +108,15 @@ npm run deploy      # build and deploy to your signed-in Cloudflare account
 
 Tests compare FFT intensities with direct complex sums on all three planes, exact finite-point Debye isotropic sums, analytic sphere scattering, quadrature weights, refinement, rotation/translation invariance, normalization, shared-axis consistency, Friedel symmetry, uniform-volume moments, actual mesh imports, and malformed/open meshes. `tests/browser-isotropic.html` checks exported isotropic invariance during rotation, changing plane averages, cache reuse, and invalidation after resampling/accuracy changes. `node scripts/make-examples.cjs` regenerates the example files.
 
+Inverse checks cover input validation, nuisance-parameter fitting, finite-cube scattering versus direct angular amplitudes, deterministic fit improvement and approximate size recovery for a synthetic sphere, fitting an independent analytic prolate-ellipsoid curve, material connectivity, watertight STL exports and matching fitted/exported volume. Open `tests/browser-inverse.html` through the local server to check drag/drop isolation, cancellation, independent candidates, downloads and the return to forward mode. These targeted checks do not establish general reconstruction accuracy.
+
 ## References and relationship to the notes
 
 - [Larsen et al. (2023), *Shape2SAS: a web application to simulate small-angle scattering data and pair distance distributions from user-defined shapes*, J. Appl. Cryst. 56, 1287–1294](https://journals.iucr.org/j/issues/2023/04/00/jl5064/index.html). The supplied paper calculates isotropic scattering using point-pair distances. This MVP follows the proposed alternative of orientation-dependent 2D planes.
 - [cw-do/morphsld_sas](https://github.com/cw-do/morphsld_sas), inspected at commit `230a2dfad50b5ea99c7be150df3a8ab45053fcbd`. Its scattering engine transforms radial scattering-length-density profiles and includes analytic sphere validation. It is context rather than an arbitrary-mesh loader or 2D detector engine.
 - [SasView scattering theory](https://www.sasview.org/docs/user/qtgui/Perspectives/Fitting/theory.html) defines the isotropic 1D pattern as the orientational average of intensity; this is distinct from averaging directional detector planes.
 - [SasView prism model](https://www.sasview.org/docs/user/models/prism.html) describes equal-weight Fibonacci directions on a sphere as an orientational integration method. Its use of the method does not establish convergence for our 40-direction default.
+- [Svergun (1999), DAMMIN](https://www.embl-hamburg.de/biosaxs/dammin.html) reconstructs low-resolution shapes by simulated annealing of a dummy-atom model. The inverse feature follows the broad idea of constrained occupancy optimization; it is a separate, much smaller voxel implementation and uses no ATSAS source code.
 
 This project is an independent implementation; no source code was copied from either reference. Two example STL assets come from the MIT-licensed Trimesh repository. The detailed car is a modified CC0 derivative of Khronos' ToyCar by Guido Odendahl and Eric Chadwick. Upstream notices, pinned source links, checksums, and the car's conversion steps are in `examples/` and embedded with the assets in the portable HTML.
 
