@@ -3,6 +3,49 @@ const assert = require('node:assert/strict');
 const SAS = require('../src/core.js');
 const Inverse = require('../src/inverse.js');
 
+test('Synthetic sphere data honors q bounds, point count, spacing, zero q, and deterministic noise', () => {
+  const p=Inverse.sphereExample({qmin:0,qmax:.3,count:301});
+  assert.equal(p.q.length,301);assert.equal(p.q[0],0);assert.equal(p.q.at(-1),.3);
+  assert.ok(Number.isFinite(p.intensity[0]));assert.equal(p.q[150],.15);
+  assert.deepEqual(p,Inverse.sphereExample({qmin:0,qmax:.3,count:301}));
+  const log=Inverse.sphereExample({qmin:.001,qmax:1,count:101,spacing:'log'});
+  assert.equal(log.q[0],.001);assert.equal(log.q.at(-1),1);
+  assert.ok(Math.abs(log.q[50]-Math.sqrt(.001))<1e-12);
+  assert.equal(log.generator.spacing,'log');
+  assert.throws(()=>Inverse.sphereExample({qmin:.1,qmax:.01}),/minimum q/);
+  assert.throws(()=>Inverse.sphereExample({qmin:0,spacing:'log'}),/positive minimum/);
+  assert.throws(()=>Inverse.sphereExample({count:7}),/8 and 5,000/);
+});
+
+test('Separable fine-grid amplitudes match direct complex phases with bounded memory', () => {
+  const directions=[[1,0,0,1/3],[0,1,0,1/3],[.3,.4,Math.sqrt(.75),1/3]],q=Float64Array.from([0,.013,.1,.3]);
+  for(const size of [15,21,31]) {
+    const lattice=Inverse.makeLattice(size,80),cache=Inverse.amplitudeCache(lattice,q,directions);
+    assert.equal(cache.mode,'separable-axes');
+    for(const site of [0,Math.floor(lattice.sites.length/2),lattice.sites.length-1]) {
+      const values=cache.get(site),p=lattice.sites[site].p;
+      for(let k=0;k<q.length;k++)for(let d=0;d<directions.length;d++) {
+        const u=directions[d],phase=q[k]*80*(p[0]*u[0]+p[1]*u[1]+p[2]*u[2]),index=2*(k*directions.length+d);
+        assert.ok(Math.abs(values[index]-Math.cos(phase))<3e-7);
+        assert.ok(Math.abs(values[index+1]-Math.sin(phase))<3e-7);
+      }
+    }
+  }
+  const lattice=Inverse.makeLattice(31,80),large=Inverse.amplitudeCache(lattice,Float64Array.from({length:64},(_,i)=>i*.002),Array.from({length:256},()=>[1,0,0,1/256]));
+  assert.ok(large.bytes<12*1024**2,'31³ amplitude cache stays below 12 MiB');
+  assert.ok(lattice.sites.length*64*256*8>1500*1024**2,'full per-site cache would exceed 1.5 GiB');
+});
+
+test('Finest grid completes a reproducible search and exports a connected, closed shape', () => {
+  const p=Inverse.sphereExample({qmin:0,qmax:.2,count:100}),settings={diameter:80,size:31,iterations:500,attempts:1,qmax:.2};
+  const result=Inverse.reconstruct(p,settings),c=result.candidates[0],lattice=Inverse.makeLattice(31,80);
+  assert.ok(Number.isFinite(c.wrms));assert.equal(result.amplitudeCache.mode,'separable-axes');
+  assert.ok(Inverse.isConnected(lattice,c.occupied,c.voxelCount));
+  assert.ok(SAS.prepareMesh(c.mesh,'fine.stl').faces>0);
+  assert.deepEqual(c.occupied,Inverse.reconstruct(p,settings).candidates[0].occupied);
+  assert.equal(result.data.generator.count,100);
+});
+
 test('Inverse input reads data and own isotropic CSV, sorts q, and rejects unusable measurements', () => {
   const rows = Array.from({length:10}, (_,i)=>`${(10-i)/100},${1/(11-i)},0.01`);
   const p = Inverse.parseProfile('# example\nq,I,sigma\n'+rows.join('\n'));

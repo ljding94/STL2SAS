@@ -35,6 +35,7 @@ main{margin:0 auto}
 .inverse-controls .drop-zone{padding:22px 9px 16px;margin-bottom:10px}
 .inverse-controls fieldset{border:0;padding:0;margin:0;min-width:0}
 .inverse-source-buttons{display:flex;gap:6px}.inverse-source-buttons button{flex:1;height:auto;min-height:36px;padding:7px;font-size:10px}
+.inverse-generator{font-size:11px;border:1px solid var(--border);border-radius:6px;padding:11px;margin-bottom:10px}.inverse-generator summary{cursor:pointer;font-weight:550;color:var(--green)}.inverse-generator .field-label{font-size:10px;margin-top:12px}.inverse-generator .hint{margin-bottom:0}.inverse-data-export{margin-top:8px}
 .inverse-data-summary{font-size:10px;line-height:1.7;color:#617467;border-bottom:1px solid var(--border);padding-bottom:14px;overflow-wrap:anywhere}
 .inverse-background{margin:19px 0!important;display:flex;align-items:flex-start;gap:8px;font-size:11px!important;line-height:1.6}
 .inverse-run-buttons{display:flex;gap:8px}.inverse-run-buttons .primary-button{flex:1;justify-content:center;min-height:40px}.inverse-run-buttons .secondary-button{height:40px;padding:0 13px}
@@ -55,7 +56,7 @@ main{margin:0 auto}
 .inverse-method{border-top:1px solid var(--border);margin-top:22px;padding-top:16px;font-size:11px;color:#6f7c70;line-height:1.8}.inverse-method summary{cursor:pointer;font-weight:550;color:#4e6e57}.inverse-method p{max-width:950px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:1150px){.inverse-layout{grid-template-columns:230px minmax(0,1fr);gap:20px}.inverse-card{padding:20px}.inverse-heading h2{font-size:21px}.inverse-heading .tag{display:none}}
-@media(max-width:850px){.inverse-layout{grid-template-columns:minmax(0,1fr)}.inverse-controls{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}.inverse-controls>fieldset{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:0 18px}.inverse-controls fieldset>.hint,.inverse-controls .inverse-background{grid-column:1/-1}.inverse-controls .inverse-data-summary{grid-column:1/-1}.inverse-controls .inverse-run-buttons{grid-column:1/-1}.inverse-controls>progress,.inverse-controls>.inverse-status{grid-column:1/-1}.inverse-controls>.drop-zone{align-self:start;margin-bottom:12px}.inverse-source-buttons{flex-direction:column;margin-bottom:12px}.inverse-heading h2{font-size:23px}}
+@media(max-width:850px){.inverse-layout{grid-template-columns:minmax(0,1fr)}.inverse-controls{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}.inverse-controls>fieldset{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:0 18px}.inverse-controls fieldset>.hint,.inverse-controls .inverse-background{grid-column:1/-1}.inverse-controls .inverse-data-summary,.inverse-controls .inverse-generator,.inverse-controls .inverse-data-export{grid-column:1/-1}.inverse-controls .inverse-run-buttons{grid-column:1/-1}.inverse-controls>progress,.inverse-controls>.inverse-status{grid-column:1/-1}.inverse-controls>.drop-zone{align-self:start;margin-bottom:12px}.inverse-source-buttons{flex-direction:column;margin-bottom:12px}.inverse-heading h2{font-size:23px}}
 @media(max-width:440px){.inverse-card{padding:16px}.inverse-controls{display:block}.inverse-controls>fieldset{display:block}.inverse-source-buttons{flex-direction:row}.inverse-heading h2{font-size:20px}.inverse-jump{display:block;margin-top:5px}#inverse-plot{height:260px}.inverse-candidate-row{align-items:flex-start;flex-direction:column;gap:7px}.inverse-candidate-row select{width:100%;flex:auto}.inverse-downloads button{flex-grow:1}}
 </style>
 </head>
@@ -115,15 +116,21 @@ main{margin:0 auto}
       <div class="inverse-controls">
         <input type="file" id="inverse-file" accept=".txt,.dat,.csv" hidden>
         <button id="inverse-drop" class="drop-zone"><strong>Drop scattering data here</strong><span>q, I(q), optional σ · TXT, DAT or CSV</span><small>q in radians per length · max 2 MB</small></button>
-        <div class="inverse-source-buttons"><button id="inverse-demo" class="secondary-button">Try a sphere dataset</button><button id="inverse-current" class="secondary-button">Use forward curve</button></div>
+        <details class="inverse-generator" open><summary>Synthetic sphere data</summary><fieldset id="inverse-generator-settings"><legend class="sr-only">Synthetic data settings</legend>
+          <div class="two-fields"><div><label class="field-label" for="inverse-gen-qmin">Minimum q (Å⁻¹)</label><input id="inverse-gen-qmin" type="number" min="0" max="10" step="any" value="0.004"></div><div><label class="field-label" for="inverse-gen-qmax">Maximum q (Å⁻¹)</label><input id="inverse-gen-qmax" type="number" min="0.000000001" max="10" step="any" value="0.14"></div></div>
+          <div class="two-fields"><div><label class="field-label" for="inverse-gen-count">Data points</label><input id="inverse-gen-count" type="number" min="8" max="5000" step="1" value="100"></div><div><label class="field-label" for="inverse-gen-spacing">q spacing</label><select id="inverse-gen-spacing"><option value="linear" selected>Linear</option><option value="log">Logarithmic</option></select></div></div>
+          <p class="hint">Radius 30 Å, seeded noise. Changes regenerate an active synthetic dataset; the fitted q range is set separately below.</p>
+        </fieldset></details>
+        <div class="inverse-source-buttons"><button id="inverse-demo" class="secondary-button">Generate sphere data</button><button id="inverse-current" class="secondary-button">Use forward curve</button></div>
+        <button id="inverse-data-export" class="text-button inverse-data-export" disabled>↓ Download input data CSV</button>
         <p class="inverse-data-summary" id="inverse-data-summary">Load a curve, or start with the synthetic sphere example.</p>
         <fieldset id="inverse-settings">
           <legend class="sr-only">Reconstruction settings</legend>
           <div class="two-fields"><div><label class="field-label" for="inverse-diameter">Search diameter</label><input id="inverse-diameter" type="number" value="94" min="0.000001" max="1000000000" step="any"></div><div><label class="field-label" for="inverse-unit">Length unit</label><select id="inverse-unit"><option value="Å" selected>Å</option><option value="nm">nm</option><option value="µm">µm</option><option value="mm">mm</option><option value="unit">model unit</option></select></div></div>
           <p class="hint">Bounding sphere diameter, in the inverse of your q unit. The suggested size is only a rough Guinier estimate.</p>
-          <div class="two-fields"><div><label class="field-label" for="inverse-qmax">Maximum q to fit</label><input id="inverse-qmax" type="number" value="0.14" min="0.000000001" step="any"></div><div><label class="field-label" for="inverse-size">Grid resolution</label><select id="inverse-size"><option value="9">9³ · quick</option><option value="11" selected>11³ · finer</option></select></div></div>
+          <div class="two-fields"><div><label class="field-label" for="inverse-qmax">Maximum q to fit</label><input id="inverse-qmax" type="number" value="0.14" min="0.000000001" step="any"></div><div><label class="field-label" for="inverse-size">Grid resolution</label><select id="inverse-size"><option value="9">9³ · quick</option><option value="11" selected>11³ · standard</option><option value="15">15³ · fine</option><option value="21">21³ · very fine</option><option value="31">31³ · finest, slower</option></select></div></div>
           <p id="inverse-resolution" class="hint">The coarse model requires q max × diameter ≤ 30.</p>
-          <div class="two-fields"><div><label class="field-label" for="inverse-iterations">Steps per search</label><select id="inverse-iterations"><option value="1000">1,000 · preview</option><option value="5000" selected>5,000 · standard</option><option value="15000">15,000 · longer</option></select></div><div><label class="field-label" for="inverse-attempts">Independent searches</label><select id="inverse-attempts"><option value="3" selected>3 · compare shapes</option><option value="1">1 · quick check</option></select></div></div>
+          <div class="two-fields"><div><label class="field-label" for="inverse-iterations">Steps per search</label><select id="inverse-iterations"><option value="1000">1,000 · preview</option><option value="5000" selected>5,000 · standard</option><option value="15000">15,000 · longer</option><option value="50000">50,000 · fine grids</option><option value="100000">100,000 · extended</option></select></div><div><label class="field-label" for="inverse-attempts">Independent searches</label><select id="inverse-attempts"><option value="3" selected>3 · compare shapes</option><option value="1">1 · quick check</option></select></div></div>
           <div class="two-fields"><div><label class="field-label" for="inverse-regularization">Compactness prior</label><select id="inverse-regularization"><option value="0">Off · 0</option><option value="0.3" selected>Mild · 0.3</option><option value="1">Strong · 1</option></select></div><div><label class="field-label" for="inverse-seed">Random seed</label><input id="inverse-seed" type="number" min="1" max="2147483647" step="1" value="42"></div></div>
           <label class="analytic-toggle inverse-background"><input id="inverse-background" type="checkbox"> Fit a nonnegative constant background</label>
         </fieldset>
@@ -612,6 +619,7 @@ main{margin:0 auto}
   'use strict';
   const SAS = typeof module !== 'undefined' && module.exports ? require('./core.js') : root.SAS;
   const sinc = x => Math.abs(x) < 1e-8 ? 1 : Math.sin(x) / x;
+  const GRID_SIZES = [9,11,15,21,31];
 
   function prepareProfile(rows, hasSigma = false) {
     if (rows.length < 8) throw Error('Provide at least 8 q, intensity data points.');
@@ -698,7 +706,7 @@ main{margin:0 auto}
   }
 
   function makeLattice(size, diameter) {
-    if (![9,11].includes(size) || !(diameter > 0) || !Number.isFinite(diameter)) throw Error('Invalid search resolution or diameter.');
+    if (!GRID_SIZES.includes(size) || !(diameter > 0) || !Number.isFinite(diameter)) throw Error('Invalid search resolution or diameter.');
     const sites = [], lookup = new Int32Array(size**3).fill(-1), half = (size - 1)/2;
     // Every cube, including its corners, stays within the search sphere.
     const radius = size/2 - Math.sqrt(3)/2;
@@ -816,42 +824,73 @@ main{margin:0 auto}
     return buffer;
   }
 
+  function amplitudeCache(lattice, q, directions, progress = () => {}) {
+    const width=q.length*directions.length, stride=width*2;
+    if(lattice.size<=11) {
+      const values=new Float32Array(lattice.sites.length*stride);
+      for(let i=0;i<lattice.sites.length;i++) {
+        const p=lattice.sites[i].p;
+        for(let k=0;k<q.length;k++)for(let d=0;d<directions.length;d++) {
+          const u=directions[d],phase=q[k]*lattice.diameter*(p[0]*u[0]+p[1]*u[1]+p[2]*u[2]),index=i*stride+2*(k*directions.length+d);
+          values[index]=Math.cos(phase);values[index+1]=Math.sin(phase);
+        }
+        if(i%32===0)progress(i/lattice.sites.length);
+      }
+      progress(1);
+      return {mode:'per-site',bytes:values.byteLength,get:site=>values.subarray(site*stride,(site+1)*stride)};
+    }
+    // exp(i q·r) separates into x/y/z factors on a Cartesian grid. Fine grids
+    // store 3L axis tables instead of O(L³) full-site tables. A reusable buffer
+    // combines them only for the cube being initialized or proposed.
+    const axes=new Float32Array(3*lattice.size*stride),scratch=new Float32Array(stride),half=(lattice.size-1)/2;
+    for(let axis=0;axis<3;axis++)for(let position=0;position<lattice.size;position++) {
+      const coordinate=(position-half)*lattice.diameter/lattice.size,base=(axis*lattice.size+position)*stride;
+      for(let k=0;k<q.length;k++)for(let d=0;d<directions.length;d++) {
+        const index=base+2*(k*directions.length+d),phase=q[k]*coordinate*directions[d][axis];
+        axes[index]=Math.cos(phase);axes[index+1]=Math.sin(phase);
+      }
+      progress((axis*lattice.size+position+1)/(3*lattice.size));
+    }
+    return {mode:'separable-axes',bytes:axes.byteLength+scratch.byteLength,get:site=>{
+      const {x,y,z}=lattice.sites[site],a=x*stride,b=(lattice.size+y)*stride,c=(2*lattice.size+z)*stride;
+      for(let k=0;k<stride;k+=2) {
+        const re=axes[a+k]*axes[b+k]-axes[a+k+1]*axes[b+k+1],im=axes[a+k]*axes[b+k+1]+axes[a+k+1]*axes[b+k];
+        scratch[k]=re*axes[c+k]-im*axes[c+k+1];scratch[k+1]=re*axes[c+k+1]+im*axes[c+k];
+      }
+      return scratch;
+    }};
+  }
+
   function reconstruct(profile, settings={}, progress=()=>{}) {
     const start=performance.now();
     const diameter=Number(settings.diameter),size=Number(settings.size||11),iterations=Number(settings.iterations||5000),attempts=Number(settings.attempts||3),seed=Number(settings.seed||42),regularization=Number(settings.regularization??.3),background=!!settings.background;
     const qmax=Math.min(Number(settings.qmax||profile.q.at(-1)),profile.q.at(-1));
-    if(!Number.isFinite(qmax)||qmax<=0||qmax*diameter>30.00001)throw Error('This coarse envelope requires q max × search diameter ≤ 30. Lower q max or the search diameter.');
-    if(!Number.isInteger(iterations)||iterations<500||iterations>20000||![1,3].includes(attempts)||!Number.isFinite(seed)||!Number.isFinite(regularization)||regularization<0||regularization>5)throw Error('Invalid reconstruction settings.');
+    if(!Number.isFinite(qmax)||qmax<=0||qmax*diameter>30.00001)throw Error('This reconstruction requires q max × search diameter ≤ 30. Lower q max or the search diameter.');
+    if(!Number.isInteger(iterations)||iterations<500||iterations>100000||![1,3].includes(attempts)||!Number.isFinite(seed)||!Number.isFinite(regularization)||regularization<0||regularization>5)throw Error('Invalid reconstruction settings.');
     const used=subset(profile,qmax,5000),sample=subset(used,qmax),lattice=makeLattice(size,diameter),directions=optimizationRule();
-    const nq=sample.q.length,nd=directions.length,width=nq*nd,cache=new Float32Array(lattice.sites.length*width*2),factors=new Float64Array(width);
+    const nq=sample.q.length,nd=directions.length,width=nq*nd,factors=new Float64Array(width);
     for(let q=0;q<nq;q++)for(let d=0;d<nd;d++) {
       const dir=directions[d],v=sample.q[q]*diameter/(2*size);
       factors[q*nd+d]=dir[3]*(sinc(v*dir[0])*sinc(v*dir[1])*sinc(v*dir[2]))**2;
     }
     progress({stage:'Preparing angular amplitudes',fraction:0});
-    for(let i=0;i<lattice.sites.length;i++) {
-      const p=lattice.sites[i].p;
-      for(let q=0;q<nq;q++)for(let d=0;d<nd;d++) {
-        const direction=directions[d],phase=sample.q[q]*diameter*(p[0]*direction[0]+p[1]*direction[1]+p[2]*direction[2]),index=(i*width+q*nd+d)*2;
-        cache[index]=Math.cos(phase);cache[index+1]=Math.sin(phase);
-      }
-      if(i%32===0)progress({stage:'Preparing angular amplitudes',fraction:.1*i/lattice.sites.length});
-    }
+    const cache=amplitudeCache(lattice,sample.q,directions,fraction=>progress({stage:'Preparing angular amplitudes',fraction:.1*fraction}));
     const candidates=[];
     for(let attempt=0;attempt<attempts;attempt++) {
       const random=SAS.random(seed+attempt*7919),occupied=initialShape(lattice,profile.rg,attempt),amplitude=new Float64Array(width*2);
       let count=occupied.reduce((a,b)=>a+b,0),surface=0;
       for(let i=0;i<occupied.length;i++)if(occupied[i]) {
-        for(let k=0;k<amplitude.length;k++)amplitude[k]+=cache[i*amplitude.length+k];
+        const values=cache.get(i);
+        for(let k=0;k<amplitude.length;k++)amplitude[k]+=values[k];
         for(const j of lattice.neighbors[i])if(j<0||!occupied[j])surface++;
       }
-      function evaluate(site=-1,sign=0,n=count) {
-        const curve=new Float64Array(nq),base=site*width*2;
+      function evaluate(values=null,sign=0,n=count) {
+        const curve=new Float64Array(nq);
         for(let q=0;q<nq;q++) {
           let intensity=0;
           for(let d=0;d<nd;d++) {
             const k=q*nd+d,index=k*2;
-            const re=amplitude[index]+(sign?sign*cache[base+index]:0),im=amplitude[index+1]+(sign?sign*cache[base+index+1]:0);
+            const re=amplitude[index]+(sign?sign*values[index]:0),im=amplitude[index+1]+(sign?sign*values[index+1]:0);
             intensity+=factors[k]*(re*re+im*im);
           }
           curve[q]=intensity/(n*n);
@@ -872,11 +911,11 @@ main{margin:0 auto}
           const valid=localManifold(lattice,occupied,site)&&(sign===1||isConnected(lattice,occupied,nextCount));
           occupied[site]=sign===1?0:1;
           if(valid) {
-            const proposal=evaluate(site,sign,nextCount),nextEnergy=proposal.score+regularization*compactness(nextSurface,nextCount);
+            const values=cache.get(site),proposal=evaluate(values,sign,nextCount),nextEnergy=proposal.score+regularization*compactness(nextSurface,nextCount);
             const temperature=Math.max(.002,Math.min(4,Math.max(.15,best.score*.08)))*(.003/.15)**(step/iterations);
             if(nextEnergy<energy||random()<Math.exp((energy-nextEnergy)/temperature)) {
               occupied[site]=sign===1?1:0;count=nextCount;surface=nextSurface;current=proposal;energy=nextEnergy;
-              for(let k=0;k<amplitude.length;k++)amplitude[k]+=sign*cache[site*amplitude.length+k];
+              for(let k=0;k<amplitude.length;k++)amplitude[k]+=sign*values[k];
               if(energy<best.energy)best={occupied:occupied.slice(),...proposal,energy,count,surface};
             }
           }
@@ -893,20 +932,25 @@ main{margin:0 auto}
     }
     candidates.sort((a,b)=>(a.score+regularization*a.compactness)-(b.score+regularization*b.compactness));
     progress({stage:'Complete',fraction:1});
-    return {candidates,data:used,settings:{diameter,size,iterations,attempts,seed,regularization,background,qmax},optimizedPoints:sample.q.length,optimizationDirections:nd,verificationDirections:2048,ms:performance.now()-start};
+    return {candidates,data:used,settings:{diameter,size,iterations,attempts,seed,regularization,background,qmax},optimizedPoints:sample.q.length,optimizationDirections:nd,verificationDirections:2048,amplitudeCache:{mode:cache.mode,bytes:cache.bytes},ms:performance.now()-start};
   }
 
-  function sphereExample() {
+  function sphereExample(settings={}) {
+    const qmin=Number(settings.qmin??.004),qmax=Number(settings.qmax??.14),count=Number(settings.count??100),spacing=settings.spacing??'linear';
+    if(!Number.isFinite(qmin)||!Number.isFinite(qmax)||qmin<0||qmax<=qmin||qmax>10)throw Error('Use 0 ≤ minimum q < maximum q ≤ 10 Å⁻¹.');
+    if(!Number.isInteger(count)||count<8||count>5000)throw Error('Generate between 8 and 5,000 data points.');
+    if(!['linear','log'].includes(spacing)||spacing==='log'&&qmin===0)throw Error('Log spacing requires a positive minimum q.');
     const random=SAS.random(1701),rows=[],radius=30;
-    for(let i=0;i<100;i++) {
-      const q=.004+i*.136/99,x=q*radius,a=3*(Math.sin(x)-x*Math.cos(x))/x**3,intensity=a*a,sigma=.03*intensity+.0002;
+    for(let i=0;i<count;i++) {
+      const t=i/(count-1),q=i===0?qmin:i===count-1?qmax:spacing==='log'?Math.exp(Math.log(qmin)+t*(Math.log(qmax)-Math.log(qmin))):qmin+t*(qmax-qmin);
+      const x=q*radius,a=Math.abs(x)<1e-3?1-x*x/10+x**4/280:3*(Math.sin(x)-x*Math.cos(x))/x**3,intensity=a*a,sigma=.03*intensity+.0002;
       const noise=Math.sqrt(-2*Math.log(Math.max(random(),1e-12)))*Math.cos(2*Math.PI*random());
       rows.push([q,intensity+sigma*noise*.4,sigma]);
     }
-    return prepareProfile(rows,true);
+    return {...prepareProfile(rows,true),generator:{type:'sphere',radius,lengthUnit:'Å',qmin,qmax,count,spacing,noiseSeed:1701,noiseSigmaMultiplier:.4}};
   }
 
-  const api={parseProfile,prepareProfile,fitScale,makeLattice,localManifold,isConnected,initialShape,voxelSTL,centers,interpolate,reconstruct,sphereExample};
+  const api={parseProfile,prepareProfile,fitScale,GRID_SIZES,makeLattice,amplitudeCache,localManifold,isConnected,initialShape,voxelSTL,centers,interpolate,reconstruct,sphereExample};
   root.SASInverse=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:self);
 
@@ -1411,6 +1455,7 @@ self.onmessage = ({data}) => {
   'use strict';
   const SAS = typeof module !== 'undefined' && module.exports ? require('./core.js') : root.SAS;
   const sinc = x => Math.abs(x) < 1e-8 ? 1 : Math.sin(x) / x;
+  const GRID_SIZES = [9,11,15,21,31];
 
   function prepareProfile(rows, hasSigma = false) {
     if (rows.length < 8) throw Error('Provide at least 8 q, intensity data points.');
@@ -1497,7 +1542,7 @@ self.onmessage = ({data}) => {
   }
 
   function makeLattice(size, diameter) {
-    if (![9,11].includes(size) || !(diameter > 0) || !Number.isFinite(diameter)) throw Error('Invalid search resolution or diameter.');
+    if (!GRID_SIZES.includes(size) || !(diameter > 0) || !Number.isFinite(diameter)) throw Error('Invalid search resolution or diameter.');
     const sites = [], lookup = new Int32Array(size**3).fill(-1), half = (size - 1)/2;
     // Every cube, including its corners, stays within the search sphere.
     const radius = size/2 - Math.sqrt(3)/2;
@@ -1615,42 +1660,73 @@ self.onmessage = ({data}) => {
     return buffer;
   }
 
+  function amplitudeCache(lattice, q, directions, progress = () => {}) {
+    const width=q.length*directions.length, stride=width*2;
+    if(lattice.size<=11) {
+      const values=new Float32Array(lattice.sites.length*stride);
+      for(let i=0;i<lattice.sites.length;i++) {
+        const p=lattice.sites[i].p;
+        for(let k=0;k<q.length;k++)for(let d=0;d<directions.length;d++) {
+          const u=directions[d],phase=q[k]*lattice.diameter*(p[0]*u[0]+p[1]*u[1]+p[2]*u[2]),index=i*stride+2*(k*directions.length+d);
+          values[index]=Math.cos(phase);values[index+1]=Math.sin(phase);
+        }
+        if(i%32===0)progress(i/lattice.sites.length);
+      }
+      progress(1);
+      return {mode:'per-site',bytes:values.byteLength,get:site=>values.subarray(site*stride,(site+1)*stride)};
+    }
+    // exp(i q·r) separates into x/y/z factors on a Cartesian grid. Fine grids
+    // store 3L axis tables instead of O(L³) full-site tables. A reusable buffer
+    // combines them only for the cube being initialized or proposed.
+    const axes=new Float32Array(3*lattice.size*stride),scratch=new Float32Array(stride),half=(lattice.size-1)/2;
+    for(let axis=0;axis<3;axis++)for(let position=0;position<lattice.size;position++) {
+      const coordinate=(position-half)*lattice.diameter/lattice.size,base=(axis*lattice.size+position)*stride;
+      for(let k=0;k<q.length;k++)for(let d=0;d<directions.length;d++) {
+        const index=base+2*(k*directions.length+d),phase=q[k]*coordinate*directions[d][axis];
+        axes[index]=Math.cos(phase);axes[index+1]=Math.sin(phase);
+      }
+      progress((axis*lattice.size+position+1)/(3*lattice.size));
+    }
+    return {mode:'separable-axes',bytes:axes.byteLength+scratch.byteLength,get:site=>{
+      const {x,y,z}=lattice.sites[site],a=x*stride,b=(lattice.size+y)*stride,c=(2*lattice.size+z)*stride;
+      for(let k=0;k<stride;k+=2) {
+        const re=axes[a+k]*axes[b+k]-axes[a+k+1]*axes[b+k+1],im=axes[a+k]*axes[b+k+1]+axes[a+k+1]*axes[b+k];
+        scratch[k]=re*axes[c+k]-im*axes[c+k+1];scratch[k+1]=re*axes[c+k+1]+im*axes[c+k];
+      }
+      return scratch;
+    }};
+  }
+
   function reconstruct(profile, settings={}, progress=()=>{}) {
     const start=performance.now();
     const diameter=Number(settings.diameter),size=Number(settings.size||11),iterations=Number(settings.iterations||5000),attempts=Number(settings.attempts||3),seed=Number(settings.seed||42),regularization=Number(settings.regularization??.3),background=!!settings.background;
     const qmax=Math.min(Number(settings.qmax||profile.q.at(-1)),profile.q.at(-1));
-    if(!Number.isFinite(qmax)||qmax<=0||qmax*diameter>30.00001)throw Error('This coarse envelope requires q max × search diameter ≤ 30. Lower q max or the search diameter.');
-    if(!Number.isInteger(iterations)||iterations<500||iterations>20000||![1,3].includes(attempts)||!Number.isFinite(seed)||!Number.isFinite(regularization)||regularization<0||regularization>5)throw Error('Invalid reconstruction settings.');
+    if(!Number.isFinite(qmax)||qmax<=0||qmax*diameter>30.00001)throw Error('This reconstruction requires q max × search diameter ≤ 30. Lower q max or the search diameter.');
+    if(!Number.isInteger(iterations)||iterations<500||iterations>100000||![1,3].includes(attempts)||!Number.isFinite(seed)||!Number.isFinite(regularization)||regularization<0||regularization>5)throw Error('Invalid reconstruction settings.');
     const used=subset(profile,qmax,5000),sample=subset(used,qmax),lattice=makeLattice(size,diameter),directions=optimizationRule();
-    const nq=sample.q.length,nd=directions.length,width=nq*nd,cache=new Float32Array(lattice.sites.length*width*2),factors=new Float64Array(width);
+    const nq=sample.q.length,nd=directions.length,width=nq*nd,factors=new Float64Array(width);
     for(let q=0;q<nq;q++)for(let d=0;d<nd;d++) {
       const dir=directions[d],v=sample.q[q]*diameter/(2*size);
       factors[q*nd+d]=dir[3]*(sinc(v*dir[0])*sinc(v*dir[1])*sinc(v*dir[2]))**2;
     }
     progress({stage:'Preparing angular amplitudes',fraction:0});
-    for(let i=0;i<lattice.sites.length;i++) {
-      const p=lattice.sites[i].p;
-      for(let q=0;q<nq;q++)for(let d=0;d<nd;d++) {
-        const direction=directions[d],phase=sample.q[q]*diameter*(p[0]*direction[0]+p[1]*direction[1]+p[2]*direction[2]),index=(i*width+q*nd+d)*2;
-        cache[index]=Math.cos(phase);cache[index+1]=Math.sin(phase);
-      }
-      if(i%32===0)progress({stage:'Preparing angular amplitudes',fraction:.1*i/lattice.sites.length});
-    }
+    const cache=amplitudeCache(lattice,sample.q,directions,fraction=>progress({stage:'Preparing angular amplitudes',fraction:.1*fraction}));
     const candidates=[];
     for(let attempt=0;attempt<attempts;attempt++) {
       const random=SAS.random(seed+attempt*7919),occupied=initialShape(lattice,profile.rg,attempt),amplitude=new Float64Array(width*2);
       let count=occupied.reduce((a,b)=>a+b,0),surface=0;
       for(let i=0;i<occupied.length;i++)if(occupied[i]) {
-        for(let k=0;k<amplitude.length;k++)amplitude[k]+=cache[i*amplitude.length+k];
+        const values=cache.get(i);
+        for(let k=0;k<amplitude.length;k++)amplitude[k]+=values[k];
         for(const j of lattice.neighbors[i])if(j<0||!occupied[j])surface++;
       }
-      function evaluate(site=-1,sign=0,n=count) {
-        const curve=new Float64Array(nq),base=site*width*2;
+      function evaluate(values=null,sign=0,n=count) {
+        const curve=new Float64Array(nq);
         for(let q=0;q<nq;q++) {
           let intensity=0;
           for(let d=0;d<nd;d++) {
             const k=q*nd+d,index=k*2;
-            const re=amplitude[index]+(sign?sign*cache[base+index]:0),im=amplitude[index+1]+(sign?sign*cache[base+index+1]:0);
+            const re=amplitude[index]+(sign?sign*values[index]:0),im=amplitude[index+1]+(sign?sign*values[index+1]:0);
             intensity+=factors[k]*(re*re+im*im);
           }
           curve[q]=intensity/(n*n);
@@ -1671,11 +1747,11 @@ self.onmessage = ({data}) => {
           const valid=localManifold(lattice,occupied,site)&&(sign===1||isConnected(lattice,occupied,nextCount));
           occupied[site]=sign===1?0:1;
           if(valid) {
-            const proposal=evaluate(site,sign,nextCount),nextEnergy=proposal.score+regularization*compactness(nextSurface,nextCount);
+            const values=cache.get(site),proposal=evaluate(values,sign,nextCount),nextEnergy=proposal.score+regularization*compactness(nextSurface,nextCount);
             const temperature=Math.max(.002,Math.min(4,Math.max(.15,best.score*.08)))*(.003/.15)**(step/iterations);
             if(nextEnergy<energy||random()<Math.exp((energy-nextEnergy)/temperature)) {
               occupied[site]=sign===1?1:0;count=nextCount;surface=nextSurface;current=proposal;energy=nextEnergy;
-              for(let k=0;k<amplitude.length;k++)amplitude[k]+=sign*cache[site*amplitude.length+k];
+              for(let k=0;k<amplitude.length;k++)amplitude[k]+=sign*values[k];
               if(energy<best.energy)best={occupied:occupied.slice(),...proposal,energy,count,surface};
             }
           }
@@ -1692,20 +1768,25 @@ self.onmessage = ({data}) => {
     }
     candidates.sort((a,b)=>(a.score+regularization*a.compactness)-(b.score+regularization*b.compactness));
     progress({stage:'Complete',fraction:1});
-    return {candidates,data:used,settings:{diameter,size,iterations,attempts,seed,regularization,background,qmax},optimizedPoints:sample.q.length,optimizationDirections:nd,verificationDirections:2048,ms:performance.now()-start};
+    return {candidates,data:used,settings:{diameter,size,iterations,attempts,seed,regularization,background,qmax},optimizedPoints:sample.q.length,optimizationDirections:nd,verificationDirections:2048,amplitudeCache:{mode:cache.mode,bytes:cache.bytes},ms:performance.now()-start};
   }
 
-  function sphereExample() {
+  function sphereExample(settings={}) {
+    const qmin=Number(settings.qmin??.004),qmax=Number(settings.qmax??.14),count=Number(settings.count??100),spacing=settings.spacing??'linear';
+    if(!Number.isFinite(qmin)||!Number.isFinite(qmax)||qmin<0||qmax<=qmin||qmax>10)throw Error('Use 0 ≤ minimum q < maximum q ≤ 10 Å⁻¹.');
+    if(!Number.isInteger(count)||count<8||count>5000)throw Error('Generate between 8 and 5,000 data points.');
+    if(!['linear','log'].includes(spacing)||spacing==='log'&&qmin===0)throw Error('Log spacing requires a positive minimum q.');
     const random=SAS.random(1701),rows=[],radius=30;
-    for(let i=0;i<100;i++) {
-      const q=.004+i*.136/99,x=q*radius,a=3*(Math.sin(x)-x*Math.cos(x))/x**3,intensity=a*a,sigma=.03*intensity+.0002;
+    for(let i=0;i<count;i++) {
+      const t=i/(count-1),q=i===0?qmin:i===count-1?qmax:spacing==='log'?Math.exp(Math.log(qmin)+t*(Math.log(qmax)-Math.log(qmin))):qmin+t*(qmax-qmin);
+      const x=q*radius,a=Math.abs(x)<1e-3?1-x*x/10+x**4/280:3*(Math.sin(x)-x*Math.cos(x))/x**3,intensity=a*a,sigma=.03*intensity+.0002;
       const noise=Math.sqrt(-2*Math.log(Math.max(random(),1e-12)))*Math.cos(2*Math.PI*random());
       rows.push([q,intensity+sigma*noise*.4,sigma]);
     }
-    return prepareProfile(rows,true);
+    return {...prepareProfile(rows,true),generator:{type:'sphere',radius,lengthUnit:'Å',qmin,qmax,count,spacing,noiseSeed:1701,noiseSigmaMultiplier:.4}};
   }
 
-  const api={parseProfile,prepareProfile,fitScale,makeLattice,localManifold,isConnected,initialShape,voxelSTL,centers,interpolate,reconstruct,sphereExample};
+  const api={parseProfile,prepareProfile,fitScale,GRID_SIZES,makeLattice,amplitudeCache,localManifold,isConnected,initialShape,voxelSTL,centers,interpolate,reconstruct,sphereExample};
   root.SASInverse=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:self);
 </script>
@@ -2213,6 +2294,7 @@ self.onmessage = ({data}) => {
   function status(text, kind = 'ready') { $('inverse-status').textContent = text; $('inverse-status').dataset.state = kind; }
   function busy(value) {
     $('inverse-settings').disabled = value;
+    $('inverse-generator-settings').disabled = value;
     $('inverse-run').disabled = value || !state.profile;
     $('inverse-stop').hidden = !value;
     root.setAttribute('aria-busy', String(value));
@@ -2234,17 +2316,19 @@ self.onmessage = ({data}) => {
   }
   function resolutionHint() {
     const diameter = Number($('inverse-diameter').value), qmax = Number($('inverse-qmax').value), size = Number($('inverse-size').value);
-    $('inverse-resolution').textContent = `Voxel edge ≈ ${n(diameter/size)} ${unit()}; q max × diameter = ${n(qmax*diameter)} (limit 30).`;
+    $('inverse-resolution').textContent = `Voxel edge ≈ ${n(diameter/size)} ${unit()}; q max × diameter = ${n(qmax*diameter)} (limit 30).${size >= 15 ? ' Finer grids usually need more search steps; compare longer runs.' : ''}`;
   }
   function setProfile(profile, name, lengthUnit = 'Å', provenance = 'Uploaded isotropic intensity') {
     stop(true); state.profile = profile; state.name = name; state.provenance = provenance;
+    $('inverse-data-export').disabled = false;
     $('inverse-unit').value = lengthUnit;
     const diameter = profile.suggestedDiameter || 8 / profile.q.at(-1);
     $('inverse-diameter').value = n(diameter, 5);
     $('inverse-qmax').value = n(Math.min(profile.q.at(-1), 30 / diameter), 8);
     $('inverse-data-summary').textContent = `${name} · ${profile.q.length} points · q ${n(profile.q[0])}–${n(profile.q.at(-1))}. ${profile.hasSigma ? 'Supplied uncertainties.' : 'Assumed weights: 5% of I, with a low-q floor.'}${profile.rg ? ` Estimated Rg ≈ ${n(profile.rg)} ${lengthUnit}.` : 'No usable Guinier size estimate; set the search diameter.'} ${provenance}${profile.intensity.some(v => v <= 0) ? ' Nonpositive intensities are fitted but omitted from the log-intensity plot.' : ''}`;
     clearResult(); resolutionHint(); busy(false);
-    status('Data loaded. Check the q unit and search diameter, then reconstruct.');
+    const clipped = Number($('inverse-qmax').value) < profile.q.at(-1) * (1 - 1e-7);
+    status(clipped ? `Data loaded. The fit is limited to q ≤ ${n(Number($('inverse-qmax').value))} ${lengthUnit}⁻¹ by q max × diameter ≤ 30; the plot and input CSV retain the full generated range.` : 'Data loaded. Check the q unit and search diameter, then reconstruct.');
   }
   async function loadFile(file) {
     if (!file) return;
@@ -2268,8 +2352,17 @@ self.onmessage = ({data}) => {
     event.preventDefault(); event.stopPropagation(); $('inverse-drop').classList.remove('dragging');
     loadFile(ModelFileDrop.filesFrom(event.dataTransfer)[0]);
   });
-  $('inverse-demo').addEventListener('click', () => {
-    state.load++; setProfile(SASInverse.sphereExample(), 'Synthetic sphere · radius 30 Å', 'Å', 'Analytic sphere with seeded noise; not experimental data.');
+  function generateSphere() {
+    try {
+      for (const input of $('inverse-generator-settings').querySelectorAll('input')) if (!input.checkValidity()) { input.reportValidity(); return; }
+      const settings={qmin:Number($('inverse-gen-qmin').value),qmax:Number($('inverse-gen-qmax').value),count:Number($('inverse-gen-count').value),spacing:$('inverse-gen-spacing').value};
+      const profile=SASInverse.sphereExample(settings);
+      state.load++; setProfile(profile, 'Synthetic sphere · radius 30 Å', 'Å', `Analytic sphere with seeded noise; ${settings.spacing} q spacing; not experimental data.`);
+    } catch (error) { status(error.message, 'error'); }
+  }
+  $('inverse-demo').addEventListener('click', generateSphere);
+  $('inverse-generator-settings').addEventListener('change', () => {
+    if(state.profile?.generator?.type==='sphere')generateSphere();
   });
   $('inverse-current').addEventListener('click', () => { state.load++; document.dispatchEvent(new CustomEvent('stl2sas:profile-request')); });
   document.addEventListener('stl2sas:profile', ({detail}) => {
@@ -2322,7 +2415,7 @@ self.onmessage = ({data}) => {
   function selectCandidate() {
     const c = selected(), result = state.result; if (!c) return;
     state.mesh = SAS.prepareMesh(c.mesh, 'reconstructed.stl');
-    $('inverse-fit-stats').textContent = `Weighted RMS ${n(c.wrms)} · ${result.data.q.length} fitted points · scale ${n(c.scale)} · background ${n(c.background)} · final check: 2,048 directions. ${result.data.hasSigma ? 'Uses supplied σ.' : 'Uses assumed weights, not measured σ.'}`;
+    $('inverse-fit-stats').textContent = `Weighted RMS ${n(c.wrms)} · ${result.data.q.length} fitted points · q ${n(result.data.q[0])}–${n(result.data.q.at(-1))} ${result.lengthUnit}⁻¹ · scale ${n(c.scale)} · background ${n(c.background)} · final check: 2,048 directions. ${result.data.hasSigma ? 'Uses supplied σ.' : 'Uses assumed weights, not measured σ.'}`;
     $('inverse-shape-caption').textContent = `${c.voxelCount} connected voxels · volume ${n(c.volume)} ${result.lengthUnit}³ · exact, unsmoothed envelope`;
     state.angles = [-24,30,12]; drawPlot(); drawShape();
   }
@@ -2333,10 +2426,10 @@ self.onmessage = ({data}) => {
     const ctx = canvas.getContext('2d'); ctx.scale(dpr,dpr); return {ctx,w:rect.width,h:rect.height};
   }
   function drawPlot() {
-    const {ctx,w,h} = fitCanvas($('inverse-plot')), profile = state.result?.data || state.profile;
+    const {ctx,w,h} = fitCanvas($('inverse-plot')), profile = state.profile;
     ctx.clearRect(0,0,w,h); ctx.font = '11px system-ui'; ctx.fillStyle = '#7b8581';
     if (!profile) { ctx.textAlign='center'; ctx.fillText('Load a curve to begin',w/2,h/2); return; }
-    const c = selected(), line = c ? {q:profile.q,curve:c.curve} : state.live;
+    const c = selected(), fitted = state.result?.data, line = c ? {q:fitted.q,curve:c.curve} : state.live;
     const xmin = profile.q[0], xmax = profile.q.at(-1), left=55,right=w-15,top=16,bottom=h*.66,resTop=h*.79,resBottom=h-27;
     const positives = Array.from(profile.intensity).filter(v=>v>0).concat(line ? Array.from(line.curve).filter(v=>v>0) : []);
     const ymax = Math.ceil(Math.log10(Math.max(...positives))), ymin = Math.max(ymax-8,Math.floor(Math.log10(Math.min(...positives))));
@@ -2354,11 +2447,11 @@ self.onmessage = ({data}) => {
     }
     if(line) {ctx.strokeStyle='#167858';ctx.lineWidth=2;ctx.beginPath();let first=true;for(let i=0;i<line.q.length;i++)if(line.curve[i]>0){if(first)ctx.moveTo(x(line.q[i]),y(line.curve[i]));else ctx.lineTo(x(line.q[i]),y(line.curve[i]));first=false;}ctx.stroke();}
     ctx.restore();
-    const residual = c ? Array.from(c.curve,(v,i)=>(v-profile.intensity[i])/profile.sigma[i]) : [];
+    const residual = c ? Array.from(c.curve,(v,i)=>(v-fitted.intensity[i])/fitted.sigma[i]) : [];
     const range = Math.max(3, ...residual.map(Math.abs)), ry = v => (resTop+resBottom)/2-v/range*(resBottom-resTop)/2;
     ctx.fillStyle='#7b8581';ctx.textAlign='left';ctx.fillText('(fit − data) / σ',left,resTop-10);
     ctx.strokeStyle='#cfd8ce';ctx.beginPath();ctx.moveTo(left,ry(0));ctx.lineTo(right,ry(0));ctx.stroke();
-    ctx.fillStyle='#167858'; residual.forEach((v,i)=>{ctx.beginPath();ctx.arc(x(profile.q[i]),ry(v),2,0,2*Math.PI);ctx.fill();});
+    ctx.fillStyle='#167858'; residual.forEach((v,i)=>{ctx.beginPath();ctx.arc(x(fitted.q[i]),ry(v),2,0,2*Math.PI);ctx.fill();});
     ctx.fillStyle='#7b8581';ctx.textAlign='right';ctx.fillText(`+${n(range,2)}`,left-8,resTop+4);ctx.fillText(`−${n(range,2)}`,left-8,resBottom+4);
   }
   function drawShape() {
@@ -2384,6 +2477,12 @@ self.onmessage = ({data}) => {
   function download(data, name, type) {
     const url=URL.createObjectURL(new Blob([data],{type})),anchor=document.createElement('a');anchor.href=url;anchor.download=name;document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
   }
+  $('inverse-data-export').addEventListener('click',()=>{
+    const p=state.profile;if(!p)return;
+    const rows=['# STL2SAS input data',`# source=${JSON.stringify(state.name)}; length_unit=${unit()}; supplied_sigma=${p.hasSigma}`,`# generator=${JSON.stringify(p.generator||null)}`,p.hasSigma?'q,intensity,sigma':'q,intensity'];
+    for(let i=0;i<p.q.length;i++)rows.push((p.hasSigma?[p.q[i],p.intensity[i],p.sigma[i]]:[p.q[i],p.intensity[i]]).join(','));
+    download(rows.join('\n')+'\n','stl2sas-input-data.csv','text/csv;charset=utf-8');
+  });
   $('inverse-stl').addEventListener('click',()=>{if(selected())download(selected().mesh,`stl2sas-inverse-candidate-${state.selected+1}.stl`,'model/stl');});
   $('inverse-explore').addEventListener('click',()=>{if(selected())document.dispatchEvent(new CustomEvent('stl2sas:load-reconstruction',{detail:{mesh:selected().mesh,name:`inverse-candidate-${state.selected+1}.stl`,unit:state.result.lengthUnit}}));});
   $('inverse-fit').addEventListener('click',()=>{
@@ -2394,7 +2493,7 @@ self.onmessage = ({data}) => {
   });
   $('inverse-report').addEventListener('click',()=>{
     const r=state.result;if(!r)return;
-    const report={format:'STL2SAS inverse 0.1',source:r.source,provenance:r.provenance,lengthUnit:r.lengthUnit,settings:r.settings,selectedCandidate:state.selected+1,elapsedMs:r.ms,optimizedPoints:r.optimizedPoints,optimizationDirections:r.optimizationDirections,verificationDirections:r.verificationDirections,weights:r.data.hasSigma?'supplied sigma':'assumed max(0.05*abs(I),0.002*low-q reference)',data:{q:Array.from(r.data.q),intensity:Array.from(r.data.intensity),sigma:Array.from(r.data.sigma)},candidates:r.candidates.map((c,i)=>({rank:i+1,seed:c.seed,voxelCount:c.voxelCount,volume:c.volume,compactness:c.compactness,scale:c.scale,background:c.background,weightedRMS:c.wrms,optimizationRMS:c.optimizationWRMS,fit:Array.from(c.curve),occupiedSites:Array.from(c.occupied),centersInLengthUnits:Array.from(c.points,x=>x*r.settings.diameter)})),limitations:['Nonunique, prior-dependent coarse envelope; not a validated structural determination.','Weighted RMS is not reduced chi-squared.','No polydispersity, structure factor, varying SLD, or instrument smearing.','Final check uses approximate angular quadrature and projection FFT.','The exported STL has no embedded length unit and is not smoothed.']};
+    const report={format:'STL2SAS inverse 0.1',source:r.source,provenance:r.provenance,lengthUnit:r.lengthUnit,generator:r.data.generator||null,settings:r.settings,selectedCandidate:state.selected+1,elapsedMs:r.ms,optimizedPoints:r.optimizedPoints,optimizationDirections:r.optimizationDirections,verificationDirections:r.verificationDirections,amplitudeCache:r.amplitudeCache,weights:r.data.hasSigma?'supplied sigma':'assumed max(0.05*abs(I),0.002*low-q reference)',data:{q:Array.from(r.data.q),intensity:Array.from(r.data.intensity),sigma:Array.from(r.data.sigma)},candidates:r.candidates.map((c,i)=>({rank:i+1,seed:c.seed,voxelCount:c.voxelCount,volume:c.volume,compactness:c.compactness,scale:c.scale,background:c.background,weightedRMS:c.wrms,optimizationRMS:c.optimizationWRMS,fit:Array.from(c.curve),occupiedSites:Array.from(c.occupied),centersInLengthUnits:Array.from(c.points,x=>x*r.settings.diameter)})),limitations:['Nonunique, prior-dependent coarse envelope; not a validated structural determination.','Weighted RMS is not reduced chi-squared.','No polydispersity, structure factor, varying SLD, or instrument smearing.','Final check uses approximate angular quadrature and projection FFT.','The exported STL has no embedded length unit and is not smoothed.']};
     download(JSON.stringify(report,null,2)+'\n','stl2sas-inverse-report.json','application/json');
   });
   window.addEventListener('beforeunload',()=>{stop(true);URL.revokeObjectURL(sourceURL);});

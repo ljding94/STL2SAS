@@ -2,6 +2,7 @@
   'use strict';
   const SAS = typeof module !== 'undefined' && module.exports ? require('./core.js') : root.SAS;
   const sinc = x => Math.abs(x) < 1e-8 ? 1 : Math.sin(x) / x;
+  const GRID_SIZES = [9,11,15,21,31];
 
   function prepareProfile(rows, hasSigma = false) {
     if (rows.length < 8) throw Error('Provide at least 8 q, intensity data points.');
@@ -88,7 +89,7 @@
   }
 
   function makeLattice(size, diameter) {
-    if (![9,11].includes(size) || !(diameter > 0) || !Number.isFinite(diameter)) throw Error('Invalid search resolution or diameter.');
+    if (!GRID_SIZES.includes(size) || !(diameter > 0) || !Number.isFinite(diameter)) throw Error('Invalid search resolution or diameter.');
     const sites = [], lookup = new Int32Array(size**3).fill(-1), half = (size - 1)/2;
     // Every cube, including its corners, stays within the search sphere.
     const radius = size/2 - Math.sqrt(3)/2;
@@ -206,42 +207,73 @@
     return buffer;
   }
 
+  function amplitudeCache(lattice, q, directions, progress = () => {}) {
+    const width=q.length*directions.length, stride=width*2;
+    if(lattice.size<=11) {
+      const values=new Float32Array(lattice.sites.length*stride);
+      for(let i=0;i<lattice.sites.length;i++) {
+        const p=lattice.sites[i].p;
+        for(let k=0;k<q.length;k++)for(let d=0;d<directions.length;d++) {
+          const u=directions[d],phase=q[k]*lattice.diameter*(p[0]*u[0]+p[1]*u[1]+p[2]*u[2]),index=i*stride+2*(k*directions.length+d);
+          values[index]=Math.cos(phase);values[index+1]=Math.sin(phase);
+        }
+        if(i%32===0)progress(i/lattice.sites.length);
+      }
+      progress(1);
+      return {mode:'per-site',bytes:values.byteLength,get:site=>values.subarray(site*stride,(site+1)*stride)};
+    }
+    // exp(i q·r) separates into x/y/z factors on a Cartesian grid. Fine grids
+    // store 3L axis tables instead of O(L³) full-site tables. A reusable buffer
+    // combines them only for the cube being initialized or proposed.
+    const axes=new Float32Array(3*lattice.size*stride),scratch=new Float32Array(stride),half=(lattice.size-1)/2;
+    for(let axis=0;axis<3;axis++)for(let position=0;position<lattice.size;position++) {
+      const coordinate=(position-half)*lattice.diameter/lattice.size,base=(axis*lattice.size+position)*stride;
+      for(let k=0;k<q.length;k++)for(let d=0;d<directions.length;d++) {
+        const index=base+2*(k*directions.length+d),phase=q[k]*coordinate*directions[d][axis];
+        axes[index]=Math.cos(phase);axes[index+1]=Math.sin(phase);
+      }
+      progress((axis*lattice.size+position+1)/(3*lattice.size));
+    }
+    return {mode:'separable-axes',bytes:axes.byteLength+scratch.byteLength,get:site=>{
+      const {x,y,z}=lattice.sites[site],a=x*stride,b=(lattice.size+y)*stride,c=(2*lattice.size+z)*stride;
+      for(let k=0;k<stride;k+=2) {
+        const re=axes[a+k]*axes[b+k]-axes[a+k+1]*axes[b+k+1],im=axes[a+k]*axes[b+k+1]+axes[a+k+1]*axes[b+k];
+        scratch[k]=re*axes[c+k]-im*axes[c+k+1];scratch[k+1]=re*axes[c+k+1]+im*axes[c+k];
+      }
+      return scratch;
+    }};
+  }
+
   function reconstruct(profile, settings={}, progress=()=>{}) {
     const start=performance.now();
     const diameter=Number(settings.diameter),size=Number(settings.size||11),iterations=Number(settings.iterations||5000),attempts=Number(settings.attempts||3),seed=Number(settings.seed||42),regularization=Number(settings.regularization??.3),background=!!settings.background;
     const qmax=Math.min(Number(settings.qmax||profile.q.at(-1)),profile.q.at(-1));
-    if(!Number.isFinite(qmax)||qmax<=0||qmax*diameter>30.00001)throw Error('This coarse envelope requires q max × search diameter ≤ 30. Lower q max or the search diameter.');
-    if(!Number.isInteger(iterations)||iterations<500||iterations>20000||![1,3].includes(attempts)||!Number.isFinite(seed)||!Number.isFinite(regularization)||regularization<0||regularization>5)throw Error('Invalid reconstruction settings.');
+    if(!Number.isFinite(qmax)||qmax<=0||qmax*diameter>30.00001)throw Error('This reconstruction requires q max × search diameter ≤ 30. Lower q max or the search diameter.');
+    if(!Number.isInteger(iterations)||iterations<500||iterations>100000||![1,3].includes(attempts)||!Number.isFinite(seed)||!Number.isFinite(regularization)||regularization<0||regularization>5)throw Error('Invalid reconstruction settings.');
     const used=subset(profile,qmax,5000),sample=subset(used,qmax),lattice=makeLattice(size,diameter),directions=optimizationRule();
-    const nq=sample.q.length,nd=directions.length,width=nq*nd,cache=new Float32Array(lattice.sites.length*width*2),factors=new Float64Array(width);
+    const nq=sample.q.length,nd=directions.length,width=nq*nd,factors=new Float64Array(width);
     for(let q=0;q<nq;q++)for(let d=0;d<nd;d++) {
       const dir=directions[d],v=sample.q[q]*diameter/(2*size);
       factors[q*nd+d]=dir[3]*(sinc(v*dir[0])*sinc(v*dir[1])*sinc(v*dir[2]))**2;
     }
     progress({stage:'Preparing angular amplitudes',fraction:0});
-    for(let i=0;i<lattice.sites.length;i++) {
-      const p=lattice.sites[i].p;
-      for(let q=0;q<nq;q++)for(let d=0;d<nd;d++) {
-        const direction=directions[d],phase=sample.q[q]*diameter*(p[0]*direction[0]+p[1]*direction[1]+p[2]*direction[2]),index=(i*width+q*nd+d)*2;
-        cache[index]=Math.cos(phase);cache[index+1]=Math.sin(phase);
-      }
-      if(i%32===0)progress({stage:'Preparing angular amplitudes',fraction:.1*i/lattice.sites.length});
-    }
+    const cache=amplitudeCache(lattice,sample.q,directions,fraction=>progress({stage:'Preparing angular amplitudes',fraction:.1*fraction}));
     const candidates=[];
     for(let attempt=0;attempt<attempts;attempt++) {
       const random=SAS.random(seed+attempt*7919),occupied=initialShape(lattice,profile.rg,attempt),amplitude=new Float64Array(width*2);
       let count=occupied.reduce((a,b)=>a+b,0),surface=0;
       for(let i=0;i<occupied.length;i++)if(occupied[i]) {
-        for(let k=0;k<amplitude.length;k++)amplitude[k]+=cache[i*amplitude.length+k];
+        const values=cache.get(i);
+        for(let k=0;k<amplitude.length;k++)amplitude[k]+=values[k];
         for(const j of lattice.neighbors[i])if(j<0||!occupied[j])surface++;
       }
-      function evaluate(site=-1,sign=0,n=count) {
-        const curve=new Float64Array(nq),base=site*width*2;
+      function evaluate(values=null,sign=0,n=count) {
+        const curve=new Float64Array(nq);
         for(let q=0;q<nq;q++) {
           let intensity=0;
           for(let d=0;d<nd;d++) {
             const k=q*nd+d,index=k*2;
-            const re=amplitude[index]+(sign?sign*cache[base+index]:0),im=amplitude[index+1]+(sign?sign*cache[base+index+1]:0);
+            const re=amplitude[index]+(sign?sign*values[index]:0),im=amplitude[index+1]+(sign?sign*values[index+1]:0);
             intensity+=factors[k]*(re*re+im*im);
           }
           curve[q]=intensity/(n*n);
@@ -262,11 +294,11 @@
           const valid=localManifold(lattice,occupied,site)&&(sign===1||isConnected(lattice,occupied,nextCount));
           occupied[site]=sign===1?0:1;
           if(valid) {
-            const proposal=evaluate(site,sign,nextCount),nextEnergy=proposal.score+regularization*compactness(nextSurface,nextCount);
+            const values=cache.get(site),proposal=evaluate(values,sign,nextCount),nextEnergy=proposal.score+regularization*compactness(nextSurface,nextCount);
             const temperature=Math.max(.002,Math.min(4,Math.max(.15,best.score*.08)))*(.003/.15)**(step/iterations);
             if(nextEnergy<energy||random()<Math.exp((energy-nextEnergy)/temperature)) {
               occupied[site]=sign===1?1:0;count=nextCount;surface=nextSurface;current=proposal;energy=nextEnergy;
-              for(let k=0;k<amplitude.length;k++)amplitude[k]+=sign*cache[site*amplitude.length+k];
+              for(let k=0;k<amplitude.length;k++)amplitude[k]+=sign*values[k];
               if(energy<best.energy)best={occupied:occupied.slice(),...proposal,energy,count,surface};
             }
           }
@@ -283,19 +315,24 @@
     }
     candidates.sort((a,b)=>(a.score+regularization*a.compactness)-(b.score+regularization*b.compactness));
     progress({stage:'Complete',fraction:1});
-    return {candidates,data:used,settings:{diameter,size,iterations,attempts,seed,regularization,background,qmax},optimizedPoints:sample.q.length,optimizationDirections:nd,verificationDirections:2048,ms:performance.now()-start};
+    return {candidates,data:used,settings:{diameter,size,iterations,attempts,seed,regularization,background,qmax},optimizedPoints:sample.q.length,optimizationDirections:nd,verificationDirections:2048,amplitudeCache:{mode:cache.mode,bytes:cache.bytes},ms:performance.now()-start};
   }
 
-  function sphereExample() {
+  function sphereExample(settings={}) {
+    const qmin=Number(settings.qmin??.004),qmax=Number(settings.qmax??.14),count=Number(settings.count??100),spacing=settings.spacing??'linear';
+    if(!Number.isFinite(qmin)||!Number.isFinite(qmax)||qmin<0||qmax<=qmin||qmax>10)throw Error('Use 0 ≤ minimum q < maximum q ≤ 10 Å⁻¹.');
+    if(!Number.isInteger(count)||count<8||count>5000)throw Error('Generate between 8 and 5,000 data points.');
+    if(!['linear','log'].includes(spacing)||spacing==='log'&&qmin===0)throw Error('Log spacing requires a positive minimum q.');
     const random=SAS.random(1701),rows=[],radius=30;
-    for(let i=0;i<100;i++) {
-      const q=.004+i*.136/99,x=q*radius,a=3*(Math.sin(x)-x*Math.cos(x))/x**3,intensity=a*a,sigma=.03*intensity+.0002;
+    for(let i=0;i<count;i++) {
+      const t=i/(count-1),q=i===0?qmin:i===count-1?qmax:spacing==='log'?Math.exp(Math.log(qmin)+t*(Math.log(qmax)-Math.log(qmin))):qmin+t*(qmax-qmin);
+      const x=q*radius,a=Math.abs(x)<1e-3?1-x*x/10+x**4/280:3*(Math.sin(x)-x*Math.cos(x))/x**3,intensity=a*a,sigma=.03*intensity+.0002;
       const noise=Math.sqrt(-2*Math.log(Math.max(random(),1e-12)))*Math.cos(2*Math.PI*random());
       rows.push([q,intensity+sigma*noise*.4,sigma]);
     }
-    return prepareProfile(rows,true);
+    return {...prepareProfile(rows,true),generator:{type:'sphere',radius,lengthUnit:'Å',qmin,qmax,count,spacing,noiseSeed:1701,noiseSigmaMultiplier:.4}};
   }
 
-  const api={parseProfile,prepareProfile,fitScale,makeLattice,localManifold,isConnected,initialShape,voxelSTL,centers,interpolate,reconstruct,sphereExample};
+  const api={parseProfile,prepareProfile,fitScale,GRID_SIZES,makeLattice,amplitudeCache,localManifold,isConnected,initialShape,voxelSTL,centers,interpolate,reconstruct,sphereExample};
   root.SASInverse=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:self);
