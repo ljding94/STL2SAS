@@ -5,7 +5,9 @@
   const names = {ellipsoid: 'Triaxial ellipsoid', sphere: 'Sphere', cube: 'Cube', cylinder: 'Cylinder'};
   const planeNames = ['XY', 'XZ', 'YZ'], plotColors = ['#197d62', '#7186cf', '#d59a4c'];
   const sourceURL = URL.createObjectURL(new Blob([$('worker-source').textContent], {type: 'text/javascript'}));
-  const state = {shape: null, file: null, points: null, display: null, angles: [20, -25, 15], zoom: 1, result: null, isotropic: null, pending: null, busy: false, requestId: 0, seed: 42, sampling: false, auto: true, sampleVersion: 0};
+  const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const state = {shape: null, file: null, points: null, display: null, angles: [20, -25, 15], zoom: 1, result: null, isotropic: null, pending: null, busy: false, requestId: 0, seed: 42, sampling: false, auto: !motionPreference.matches, sampleVersion: 0};
+  motionPreference.addEventListener('change', event => { if (event.matches) { state.auto = false; updateAutoButton(); } });
   let sampleWorker = null, calcWorker = null, isotropicWorker = null, isotropicId = 0, modelData = null, modelDirty = true;
   const fmt = n => new Intl.NumberFormat('en-US').format(n);
   const number = (n, digits = 3) => Math.abs(n) >= 10000 || (Math.abs(n) > 0 && Math.abs(n) < .001) ? n.toExponential(2) : Number(n.toPrecision(digits)).toString();
@@ -195,13 +197,13 @@
       const bands = Array.from({length: 8}, () => []);
       for (let i = 0; i < rotated.length; i += 3) { const p = cameraPoint(rotated[i], rotated[i + 1], rotated[i + 2]); bands[Math.max(0, Math.min(7, Math.floor((p[2] + .85) * 8 / 1.7)))].push(p); }
       for (let b = 0; b < bands.length; b++) {
-        ctx.fillStyle = `rgba(${140 + b * 9},${184 + b * 7},${154 + b * 8},${.18 + b * .055})`;
+        ctx.fillStyle = `rgba(${140 + b * 9},${184 + b * 7},${154 + b * 8},${.27 + b * .065})`;
         const r = dpr * (.7 + b * .055);
         ctx.beginPath(); for (const p of bands[b]) { const [x, y] = project(p); ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, Math.PI * 2); } ctx.fill();
       }
     }
     const origin = [w - 43 * dpr, h - 48 * dpr], labels = ['X', 'Y', 'Z'], colors = ['#d58970', '#a9c780', '#82a3d4'];
-    for (let a = 0; a < 3; a++) { const p = [0, 0, 0]; p[a] = .36; const c = cameraPoint(...p), end = [origin[0] + c[0] * 55 * dpr, origin[1] - c[1] * 55 * dpr]; ctx.strokeStyle = colors[a]; ctx.lineWidth = dpr; ctx.beginPath(); ctx.moveTo(...origin); ctx.lineTo(...end); ctx.stroke(); ctx.fillStyle = colors[a]; ctx.font = `${8 * dpr}px sans-serif`; ctx.fillText(labels[a], end[0] + 3 * dpr, end[1] + 3 * dpr); }
+    for (let a = 0; a < 3; a++) { const p = [0, 0, 0]; p[a] = .36; const c = cameraPoint(...p), end = [origin[0] + c[0] * 55 * dpr, origin[1] - c[1] * 55 * dpr]; ctx.strokeStyle = colors[a]; ctx.lineWidth = dpr; ctx.beginPath(); ctx.moveTo(...origin); ctx.lineTo(...end); ctx.stroke(); ctx.fillStyle = colors[a]; ctx.font = `${11 * dpr}px "Public Sans", sans-serif`; ctx.fillText(labels[a], end[0] + 3 * dpr, end[1] + 3 * dpr); }
   }
 
   const palette = (() => {
@@ -252,13 +254,13 @@
     const canvas = $('profile-canvas'); fitCanvas(canvas);
     const ctx = canvas.getContext('2d'), w = canvas.width, h = canvas.height, dpr = Math.min(devicePixelRatio || 1, 2);
     ctx.clearRect(0, 0, w, h); if (!state.result) return;
-    const {qMaxD} = state.result, pad = {l: 42 * dpr, r: 12 * dpr, t: 14 * dpr, b: 32 * dpr}, pw = w - pad.l - pad.r, ph = h - pad.t - pad.b, decades = Number($('dynamic-range').value);
+    const {qMaxD} = state.result, pad = {l: 52 * dpr, r: 24 * dpr, t: 24 * dpr, b: 44 * dpr}, pw = w - pad.l - pad.r, ph = h - pad.t - pad.b, decades = Number($('dynamic-range').value);
     if (pw < 1 || ph < 1) return;
     const x = q => pad.l + q / qMaxD * pw, y = v => pad.t - Math.log10(Math.max(v, 1e-30)) / decades * ph;
-    ctx.font = `${8 * dpr}px -apple-system, sans-serif`; ctx.lineWidth = .6 * dpr;
-    for (let k = 0; k <= decades; k++) { const yy = pad.t + k / decades * ph; ctx.strokeStyle = '#e9ede5'; ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(w - pad.r, yy); ctx.stroke(); ctx.fillStyle = '#99a38f'; ctx.textAlign = 'right'; ctx.fillText(`10${superscript(-k)}`, pad.l - 8 * dpr, yy + 3 * dpr); }
-    for (let k = 0; k <= 4; k++) { const xx = pad.l + k / 4 * pw; ctx.strokeStyle = '#f0f2ec'; ctx.beginPath(); ctx.moveTo(xx, pad.t); ctx.lineTo(xx, pad.t + ph); ctx.stroke(); ctx.fillStyle = '#99a38f'; ctx.textAlign = 'center'; ctx.fillText(number(qMaxD / length() * k / 4), xx, pad.t + ph + 14 * dpr); }
-    ctx.fillStyle = '#8c9881'; ctx.textAlign = 'right'; ctx.fillText(`q (${inverseUnit()})`, w - pad.r, h - 2 * dpr); ctx.textAlign = 'left'; ctx.fillText('I(q) / I(0)', pad.l, 7 * dpr);
+    ctx.font = `${11 * dpr}px "Public Sans", sans-serif`; ctx.lineWidth = .7 * dpr;
+    for (let k = 0; k <= decades; k++) { const yy = pad.t + k / decades * ph; ctx.strokeStyle = '#e4ebe6'; ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(w - pad.r, yy); ctx.stroke(); ctx.fillStyle = '#52676f'; ctx.textAlign = 'right'; ctx.fillText(`10${superscript(-k)}`, pad.l - 8 * dpr, yy + 4 * dpr); }
+    for (let k = 0; k <= 4; k++) { const xx = pad.l + k / 4 * pw; ctx.strokeStyle = '#edf2ee'; ctx.beginPath(); ctx.moveTo(xx, pad.t); ctx.lineTo(xx, pad.t + ph); ctx.stroke(); ctx.fillStyle = '#52676f'; ctx.textAlign = 'center'; ctx.fillText(number(qMaxD / length() * k / 4), xx, pad.t + ph + 19 * dpr); }
+    ctx.fillStyle = '#52676f'; ctx.textAlign = 'right'; ctx.fillText(`q (${inverseUnit()})`, w - pad.r, h - 4 * dpr); ctx.textAlign = 'left'; ctx.fillText('I(q) / I(0)', pad.l, 13 * dpr);
     ctx.save(); ctx.beginPath(); ctx.rect(pad.l, pad.t, pw, ph); ctx.clip();
     const profiles = radialProfiles(state.result);
     for (let p = 2; p >= 0; p--) {
@@ -277,7 +279,7 @@
     }
     const floor = 1 / state.result.count;
     ctx.setLineDash([2 * dpr, 4 * dpr]); ctx.strokeStyle = '#b7bdac'; ctx.lineWidth = dpr; ctx.beginPath(); ctx.moveTo(pad.l, y(floor)); ctx.lineTo(w - pad.r, y(floor)); ctx.stroke(); ctx.setLineDash([]);
-    if (y(floor) > pad.t && y(floor) < pad.t + ph) { ctx.fillStyle = '#a0aa93'; ctx.textAlign = 'right'; ctx.fillText('1/N', w - pad.r - 4 * dpr, y(floor) - 5 * dpr); }
+    if (y(floor) > pad.t && y(floor) < pad.t + ph) { ctx.fillStyle = '#65796e'; ctx.textAlign = 'right'; ctx.fillText('1/N', w - pad.r - 4 * dpr, y(floor) - 5 * dpr); }
     ctx.restore();
   }
 
@@ -433,5 +435,9 @@
     download(rows.join('\n') + '\n', 'stl2sas-planes.csv', 'text/csv;charset=utf-8');
   });
   window.addEventListener('beforeunload', () => { removeFileDrop(); if (sampleWorker) sampleWorker.terminate(); if (calcWorker) calcWorker.terminate(); if (isotropicWorker) isotropicWorker.terminate(); URL.revokeObjectURL(sourceURL); });
+  if (window.matchMedia('(max-width: 700px)').matches) {
+    for (const id of ['model-settings', 'sampling-settings', 'detector-settings']) $(id).open = false;
+  }
+  document.fonts.ready.then(() => { modelDirty = true; drawProfile(); });
   updateLabels(); selectExample('stl-torus');
 })();

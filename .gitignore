@@ -1,6 +1,7 @@
 .DS_Store
 node_modules/
 test-results/
+.playwright-mcp/
 dist/
 .wrangler/
 .dev.vars*

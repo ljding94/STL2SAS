@@ -151,10 +151,10 @@
   }
   function drawPlot() {
     const {ctx,w,h} = fitCanvas($('inverse-plot')), profile = state.profile;
-    ctx.clearRect(0,0,w,h); ctx.font = '11px system-ui'; ctx.fillStyle = '#7b8581';
+    ctx.clearRect(0,0,w,h); ctx.font = '12px "Public Sans", sans-serif'; ctx.fillStyle = '#52676f';
     if (!profile) { ctx.textAlign='center'; ctx.fillText('Load a curve to begin',w/2,h/2); return; }
     const c = selected(), fitted = state.result?.data, line = c ? {q:fitted.q,curve:c.curve} : state.live;
-    const xmin = profile.q[0], xmax = profile.q.at(-1), left=55,right=w-15,top=16,bottom=h*.66,resTop=h*.79,resBottom=h-27;
+    const xmin = profile.q[0], xmax = profile.q.at(-1), left=56,right=w-24,top=25,bottom=h*.63,resTop=h*.78,resBottom=h-52;
     const logAxis=$('inverse-q-axis').value==='log'&&xmin>0,transform=q=>logAxis?Math.log(q):q;
     $('inverse-plot').dataset.qAxis=logAxis?'log':'linear';
     const positives = Array.from(profile.intensity).filter(v=>v>0).concat(line ? Array.from(line.curve).filter(v=>v>0) : []);
@@ -162,9 +162,9 @@
     const x = q => left+(transform(q)-transform(xmin))/(transform(xmax)-transform(xmin))*(right-left), y = v => bottom-(Math.log10(v)-ymin)/Math.max(1,ymax-ymin)*(bottom-top);
     ctx.textAlign='right'; ctx.strokeStyle='#e8ede7'; ctx.lineWidth=1;
     for(let tick=ymin;tick<=ymax;tick++) { const yy=y(10**tick);ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(right,yy);ctx.stroke();ctx.fillText(`1e${tick}`,left-9,yy+4); }
-    ctx.fillStyle='#64766a';ctx.textAlign='left';ctx.fillText('I(q)',left,10);
-    for(let i=0;i<=4;i++) {const q=logAxis?Math.exp(Math.log(xmin)+(Math.log(xmax)-Math.log(xmin))*i/4):xmin+(xmax-xmin)*i/4;ctx.textAlign='center';ctx.fillText(n(q,2),x(q),h-11);}
-    ctx.textAlign='right';ctx.fillText(`q (${state.result?.lengthUnit || unit()}⁻¹)${logAxis?' · log scale':''}`,right,h-1);
+    ctx.fillStyle='#52676f';ctx.textAlign='left';ctx.fillText('I(q)',left,13);
+    for(let i=0;i<=4;i++) {const q=logAxis?Math.exp(Math.log(xmin)+(Math.log(xmax)-Math.log(xmin))*i/4):xmin+(xmax-xmin)*i/4;ctx.textAlign='center';ctx.fillText(n(q,2),x(q),h-27);}
+    ctx.textAlign='right';ctx.fillText(`q (${state.result?.lengthUnit || unit()}⁻¹)${logAxis?' · log scale':''}`,right,h-7);
     ctx.save();ctx.beginPath();ctx.rect(left,top,right-left,bottom-top);ctx.clip();
     for(let i=0;i<profile.q.length;i++) {
       const value=profile.intensity[i];if(value<=0)continue;
@@ -175,10 +175,10 @@
     ctx.restore();
     const residual = c ? Array.from(c.curve,(v,i)=>(v-fitted.intensity[i])/fitted.sigma[i]) : [];
     const range = Math.max(3, ...residual.map(Math.abs)), ry = v => (resTop+resBottom)/2-v/range*(resBottom-resTop)/2;
-    ctx.fillStyle='#7b8581';ctx.textAlign='left';ctx.fillText('(fit − data) / σ',left,resTop-10);
+    ctx.fillStyle='#52676f';ctx.textAlign='left';ctx.fillText('(fit − data) / σ',left,resTop-12);
     ctx.strokeStyle='#cfd8ce';ctx.beginPath();ctx.moveTo(left,ry(0));ctx.lineTo(right,ry(0));ctx.stroke();
     ctx.fillStyle='#167858'; residual.forEach((v,i)=>{ctx.beginPath();ctx.arc(x(fitted.q[i]),ry(v),2,0,2*Math.PI);ctx.fill();});
-    ctx.fillStyle='#7b8581';ctx.textAlign='right';ctx.fillText(`+${n(range,2)}`,left-8,resTop+4);ctx.fillText(`−${n(range,2)}`,left-8,resBottom+4);
+    ctx.fillStyle='#52676f';ctx.textAlign='right';ctx.fillText(`+${n(range,2)}`,left-8,resTop+4);ctx.fillText(`−${n(range,2)}`,left-8,resBottom+4);
   }
   function drawShape() {
     const {ctx,w,h} = fitCanvas($('inverse-shape')); ctx.clearRect(0,0,w,h);
@@ -230,5 +230,6 @@
     download(JSON.stringify(report,null,2)+'\n','stl2sas-inverse-report.json','application/json');
   });
   window.addEventListener('beforeunload',()=>{stop(true);URL.revokeObjectURL(sourceURL);});
+  document.fonts.ready.then(() => { drawPlot(); drawShape(); });
   resolutionHint(); drawPlot(); drawShape();
 })();

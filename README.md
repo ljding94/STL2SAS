@@ -21,6 +21,8 @@ For your existing repository, follow the hosting guide to connect it directly. T
 
 The app is a single portable file: you can copy `index.html` to another computer. Its source is kept separately in `src/` for development. Current Chrome, Edge, Firefox, or Safari is recommended; the page uses Blob Web Workers, Canvas 2D, and native HTML dialogs.
 
+The interface uses a bundled Public Sans variable font, larger form and plot labels, and collapsible Model, Sampling and Detector settings. On phones, the settings begin collapsed to leave room for the model; open their headings to edit them. A keyboard skip link and visible focus states support navigation. Automatic rotation starts paused when the device requests reduced motion. The font and its license are embedded in the standalone HTML, so typography does not require an external font service. See [font attribution](assets/fonts/README.md).
+
 ## Experimental inverse reconstruction
 
 Select **Or reconstruct a shape** near the page title, or scroll to **From scattering to a possible shape**.
